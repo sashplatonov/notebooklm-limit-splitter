@@ -59,6 +59,29 @@ describe("splitter/json splitJson", () => {
     expect(chunks[0].fileName).toContain("2024-01-15_to_2024-01-16");
   });
 
+  it("keeps Telegram exports without dates undated", async () => {
+    const raw = JSON.stringify(
+      {
+        id: 2,
+        messages: [
+          { id: 1, text: "No date here" },
+          { id: 2, text: "Still no date" },
+        ],
+      },
+      null,
+      2
+    );
+    const chunks = await splitJson({
+      raw,
+      fileName: "telegram.json",
+      limits: createOptions({ maxWordsPerSource: 200 }),
+      creationTimestamp: "20240315_1430",
+    });
+    expect(chunks[0].startDate).toBeNull();
+    expect(chunks[0].endDate).toBeNull();
+    expect(chunks[0].fileName).toBe("telegram_20240315_1430.json");
+  });
+
   it("returns single chunk when content fits", async () => {
     const raw = JSON.stringify({ small: "content" });
     const chunks = await splitJson({
@@ -106,6 +129,35 @@ describe("splitter/json splitJson", () => {
         signal: controller.signal,
       })
     ).rejects.toThrow(ProcessingAbortedError);
+  });
+
+  it("splits oversized Telegram messages and preserves the date", async () => {
+    const raw = JSON.stringify(
+      {
+        id: 3,
+        messages: [
+          {
+            date: "2024-03-15",
+            id: 1,
+            text: "word ".repeat(260),
+          },
+        ],
+      },
+      null,
+      2
+    );
+    const chunks = await splitJson({
+      raw,
+      fileName: "telegram.json",
+      limits: createOptions({ maxWordsPerSource: 40, maxFileSizeMB: 1 }),
+      creationTimestamp: "20240315_1430",
+    });
+    expect(chunks.length).toBeGreaterThan(1);
+    chunks.forEach((chunk) => {
+      expect(chunk.startDate).toBe("2024-03-15");
+      expect(chunk.endDate).toBe("2024-03-15");
+      expect(chunk.fileName).toContain("2024-03-15");
+    });
   });
 });
 
