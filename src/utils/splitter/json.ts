@@ -1,4 +1,5 @@
 import type { SplitChunk, SplitLimits } from "../../types";
+import { splitTelegramJson } from "./telegram";
 import { splitText } from "./text";
 import {
   byteLen,
@@ -145,98 +146,6 @@ async function packIntoChunks(entries: string[], options: SplitTextOptions): Pro
   return ensureUniqueFileNames(chunks);
 }
 
-function createTelegramRenderer(rest: Record<string, unknown>) {
-  return (messages: Array<Record<string, unknown>>): string => {
-    return JSON.stringify({ ...rest, messages }, null, 2);
-  };
-}
-
-function countRenderedLines(text: string): number {
-  return 1 + (text.match(/\n/g)?.length ?? 0);
-}
-
-function measureTelegramMessage(message: Record<string, unknown>) {
-  const content = JSON.stringify(message, null, 2);
-  return {
-    bytes: byteLen(content),
-    lineCount: countRenderedLines(content),
-    words: countWords(content),
-  };
-}
-
-async function splitTelegramJson(
-  parsed: { messages: Array<Record<string, unknown>>; [key: string]: unknown },
-  options: SplitTextOptions
-): Promise<SplitChunk[]> {
-  const { messages, ...rest } = parsed;
-  const renderChunk = createTelegramRenderer(rest);
-  const emptyBucketContent = renderChunk([]);
-  const emptyBucketWords = countWords(emptyBucketContent);
-  const emptyBucketBytes = byteLen(emptyBucketContent);
-  const chunks: SplitChunk[] = [];
-  let bucket: Array<Record<string, unknown>> = [];
-  let bucketWords = emptyBucketWords;
-  let bucketBytes = emptyBucketBytes;
-  let lastProgressAt = Date.now();
-
-  const flush = (): void => {
-    if (bucket.length === 0) {
-      return;
-    }
-
-    chunks.push(makeChunk(renderChunk(bucket), chunks.length, options));
-    bucket = [];
-    bucketWords = emptyBucketWords;
-    bucketBytes = emptyBucketBytes;
-  };
-
-  for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
-    throwIfAborted(options.signal);
-    const message = messages[messageIndex];
-    const messageMetrics = measureTelegramMessage(message);
-    const messageBytesInArray = messageMetrics.bytes + messageMetrics.lineCount * 2;
-    const firstBucketWords = emptyBucketWords + messageMetrics.words + 1;
-    const firstBucketBytes = emptyBucketBytes + messageBytesInArray + 4;
-
-    if (firstBucketWords > options.maxWords || firstBucketBytes > options.maxBytes) {
-      flush();
-      const subChunks = await splitOversizedEntry(renderChunk([message]), messageIndex, messages.length, options);
-      subChunks.forEach((chunk) => {
-        chunks.push(rebuildChunk(chunk, chunks.length, options));
-      });
-      continue;
-    }
-
-    const additionalWords = messageMetrics.words + 1;
-    const additionalBytes = messageBytesInArray + 2;
-    if (bucket.length > 0 && (bucketWords + additionalWords > options.maxWords || bucketBytes + additionalBytes > options.maxBytes)) {
-      flush();
-    }
-
-    bucket.push(message);
-    if (bucket.length === 1) {
-      bucketWords = firstBucketWords;
-      bucketBytes = firstBucketBytes;
-    } else {
-      bucketWords += additionalWords;
-      bucketBytes += additionalBytes;
-    }
-
-    if (
-      messageIndex > 0 &&
-      (messageIndex % 100 === 0 || Date.now() - lastProgressAt >= 75)
-    ) {
-      lastProgressAt = Date.now();
-      await emitProgress(options.onProgress, (messageIndex / messages.length) * 100, "Grouping Telegram messages");
-      throwIfAborted(options.signal);
-    }
-  }
-
-  flush();
-  await emitProgress(options.onProgress, 100, "Telegram export split complete", options.signal);
-  return ensureUniqueFileNames(chunks);
-}
-
 export async function splitJson({
   raw,
   fileName,
@@ -311,6 +220,8 @@ export function verifyChunks({
       const splitChunks = await splitText(chunk.content, {
         ...info,
         ext: getExt(chunk.fileName),
+        startDate: chunk.startDate ?? info.startDate ?? null,
+        endDate: chunk.endDate ?? info.endDate ?? null,
         maxWords,
         maxBytes,
         onProgress,

@@ -18,6 +18,8 @@ export interface ChunkBuildInfo {
   baseName: string;
   ext: string;
   creationTimestamp: string;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export interface SplitTextOptions extends ChunkBuildInfo {
@@ -97,7 +99,7 @@ function toIsoDate(year: number, month: number, day: number): string | null {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
-function normalizeTelegramDate(value: unknown): string | null {
+export function normalizeTelegramDate(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
@@ -108,6 +110,16 @@ function normalizeTelegramDate(value: unknown): string | null {
   }
 
   return toIsoDate(Number(match[1]), Number(match[2]), Number(match[3]));
+}
+
+function formatDatePeriod(startDate?: string | null, endDate?: string | null): string | null {
+  const normalizedStart = startDate ?? endDate ?? null;
+  if (!normalizedStart) {
+    return null;
+  }
+
+  const normalizedEnd = endDate ?? normalizedStart;
+  return normalizedEnd === normalizedStart ? normalizedStart : `${normalizedStart}_to_${normalizedEnd}`;
 }
 
 export function isTelegramExportJson(value: unknown): value is {
@@ -123,34 +135,7 @@ export function isTelegramExportJson(value: unknown): value is {
   );
 }
 
-function extractTelegramJsonDatePeriod(text: string): string | null {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (!isTelegramExportJson(parsed)) {
-      return null;
-    }
-
-    const dates = parsed.messages
-      .map((message) => normalizeTelegramDate(message.date))
-      .filter((date): date is string => Boolean(date))
-      .sort();
-
-    if (dates.length === 0) {
-      return null;
-    }
-
-    return dates.length === 1 ? dates[0] : `${dates[0]}_to_${dates[dates.length - 1]}`;
-  } catch {
-    return null;
-  }
-}
-
 function extractDatePeriod(text: string): string | null {
-  const telegramPeriod = extractTelegramJsonDatePeriod(text);
-  if (telegramPeriod) {
-    return telegramPeriod;
-  }
-
   const dates = new Set<string>();
   const patterns = [
     /\b(20\d{2}|19\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])\b/g,
@@ -179,27 +164,35 @@ function extractDatePeriod(text: string): string | null {
 }
 
 export function buildChunkFileName(content: string, info: ChunkBuildInfo): string {
-  const period = extractDatePeriod(content);
+  const period = formatDatePeriod(info.startDate, info.endDate) ?? extractDatePeriod(content);
   return period
     ? `${info.baseName}_${period}_${info.creationTimestamp}${info.ext}`
     : `${info.baseName}_${info.creationTimestamp}${info.ext}`;
 }
 
 export function makeChunk(content: string, index: number, info: ChunkBuildInfo): SplitChunk {
+  const startDate = info.startDate ?? null;
+  const endDate = info.endDate ?? null;
   return {
     index,
     content,
     wordCount: countWords(content),
     sizeBytes: byteLen(content),
-    fileName: buildChunkFileName(content, info),
+    startDate,
+    endDate,
+    fileName: buildChunkFileName(content, { ...info, startDate, endDate }),
   };
 }
 
 export function rebuildChunk(chunk: SplitChunk, index: number, info: ChunkBuildInfo): SplitChunk {
+  const startDate = chunk.startDate ?? info.startDate ?? null;
+  const endDate = chunk.endDate ?? info.endDate ?? null;
   return {
     ...chunk,
     index,
-    fileName: buildChunkFileName(chunk.content, info),
+    startDate,
+    endDate,
+    fileName: buildChunkFileName(chunk.content, { ...info, startDate, endDate }),
   };
 }
 

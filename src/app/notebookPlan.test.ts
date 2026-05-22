@@ -20,7 +20,7 @@ function createResult(
 }
 
 describe("buildNotebookPlan", () => {
-  it("sorts chunks by extracted date and assigns notebook placement", () => {
+  it("sorts metadata-backed chunks before filename-only and undated chunks", () => {
     const results: SplitResult[] = [
       createResult("zeta.txt", "zeta.txt", [
         {
@@ -28,7 +28,9 @@ describe("buildNotebookPlan", () => {
           content: "zeta first",
           wordCount: 3,
           sizeBytes: 30,
-          fileName: "zeta_2024-05-03.txt",
+          fileName: "zeta_chunk.txt",
+          startDate: "2024-05-03",
+          endDate: "2024-05-03",
         },
         {
           index: 1,
@@ -47,7 +49,9 @@ describe("buildNotebookPlan", () => {
           content: "alpha",
           wordCount: 2,
           sizeBytes: 20,
-          fileName: "alpha_2024-05-01_to_2024-05-02.txt",
+          fileName: "alpha_legacy.txt",
+          startDate: "2024-05-01",
+          endDate: "2024-05-02",
         },
       ], {
         originalSizeBytes: 2_000,
@@ -74,8 +78,8 @@ describe("buildNotebookPlan", () => {
     expect(plan.totalWords).toBe(650);
     expect(plan.totalBytes).toBe(6_500);
     expect(plan.sortedChunks.map((item) => item.chunk.fileName)).toEqual([
-      "alpha_2024-05-01_to_2024-05-02.txt",
-      "zeta_2024-05-03.txt",
+      "alpha_legacy.txt",
+      "zeta_chunk.txt",
       "zeta_2024-05-05.txt",
       "plain.txt",
     ]);
@@ -102,6 +106,34 @@ describe("buildNotebookPlan", () => {
       sortOrder: 3,
       startDate: null,
       endDate: null,
+    });
+  });
+
+  it("falls back to filename parsing for legacy chunks without metadata", () => {
+    const results = [
+      createResult("legacy.txt", "legacy.txt", [
+        {
+          index: 0,
+          content: "legacy",
+          wordCount: 1,
+          sizeBytes: 10,
+          fileName: "legacy_2024-06-01_to_2024-06-03.txt",
+        },
+      ]),
+    ];
+
+    const plan = buildNotebookPlan(results, 10);
+
+    expect(plan.sortedChunks).toHaveLength(1);
+    expect(plan.sortedChunks[0]).toMatchObject({
+      startDate: "2024-06-01",
+      endDate: "2024-06-03",
+    });
+    expect(plan.chunkPlacements[0][0]).toMatchObject({
+      notebookNumber: 1,
+      sortOrder: 0,
+      startDate: "2024-06-01",
+      endDate: "2024-06-03",
     });
   });
 

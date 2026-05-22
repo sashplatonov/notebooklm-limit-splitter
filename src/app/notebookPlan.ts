@@ -13,6 +13,21 @@ function extractDateRangeFromFileName(fileName: string): { startDate: string; en
   };
 }
 
+function getChunkDateRange(chunk: SplitResult["chunks"][number]): { startDate: string | null; endDate: string | null } {
+  if (chunk.startDate || chunk.endDate) {
+    return {
+      startDate: chunk.startDate ?? chunk.endDate ?? null,
+      endDate: chunk.endDate ?? chunk.startDate ?? null,
+    };
+  }
+
+  const range = extractDateRangeFromFileName(chunk.fileName);
+  return {
+    startDate: range?.startDate ?? null,
+    endDate: range?.endDate ?? null,
+  };
+}
+
 function sortPlannedChunks(left: PlannedChunk, right: PlannedChunk): number {
   const leftStart = left.startDate ?? "9999-12-31";
   const rightStart = right.startDate ?? "9999-12-31";
@@ -47,13 +62,13 @@ function createEmptyPlacements(results: SplitResult[]): ChunkPlacement[][] {
 export function buildNotebookPlan(results: SplitResult[], maxSourcesPerNotebook: number): NotebookPlan {
   const flatChunks = results.flatMap((result, resultIndex) =>
     result.chunks.map((chunk, chunkIndex) => {
-      const range = extractDateRangeFromFileName(chunk.fileName);
+      const range = getChunkDateRange(chunk);
       return {
         resultIndex,
         chunkIndex,
         chunk,
-        startDate: range?.startDate ?? null,
-        endDate: range?.endDate ?? null,
+        startDate: range.startDate,
+        endDate: range.endDate,
       };
     })
   );

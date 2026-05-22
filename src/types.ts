@@ -18,6 +18,8 @@ export interface SplitChunk {
   wordCount: number;
   sizeBytes: number;
   fileName: string;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export interface SplitResult {
