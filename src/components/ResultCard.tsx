@@ -12,6 +12,7 @@ interface ChunkPlacement {
 }
 
 interface Props {
+  maxSourcesPerNotebook: number;
   result: SplitResult;
   placements: ChunkPlacement[];
   onRemove: () => void;
@@ -148,12 +149,13 @@ function ResultStats({
   );
 }
 
-export default function ResultCard({ result, placements, onRemove }: Props) {
+export default function ResultCard({ maxSourcesPerNotebook, result, placements, onRemove }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const needsSplit = result.chunks.length > 1;
   const notebookNumbers = placements.map((placement) => placement.notebookNumber);
-  const notebooksNeeded = new Set(notebookNumbers).size;
+  const notebooksNeeded = Math.max(1, Math.ceil(result.chunks.length / maxSourcesPerNotebook));
+  const assignedNotebookCount = new Set(notebookNumbers).size;
   const firstNotebook = notebookNumbers.length > 0 ? Math.min(...notebookNumbers) : 1;
   const lastNotebook = notebookNumbers.length > 0 ? Math.max(...notebookNumbers) : 1;
 
@@ -185,11 +187,11 @@ export default function ResultCard({ result, placements, onRemove }: Props) {
           setPreviewIndex={setPreviewIndex}
         />
       )}
-      {needsSplit && notebooksNeeded > 1 && (
+      {needsSplit && assignedNotebookCount > 1 && (
         <div className="border-t border-slate-100 px-6 py-3 bg-amber-50">
           <p className="text-xs text-amber-700">
-            This file was split into {result.chunks.length} chunks and will need {notebooksNeeded} NotebookLM notebook{notebooksNeeded !== 1 ? "s" : ""}.
-            {" "}Assigned to notebook {firstNotebook}-{lastNotebook}.
+            This file was split into {result.chunks.length} chunks and fits within {notebooksNeeded} NotebookLM notebook{notebooksNeeded !== 1 ? "s" : ""} by the source-count limit.
+            {" "}Its chunks are currently assigned across notebook {firstNotebook}-{lastNotebook} in the combined import plan.
           </p>
         </div>
       )}

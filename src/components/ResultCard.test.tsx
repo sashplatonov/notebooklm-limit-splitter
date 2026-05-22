@@ -9,6 +9,10 @@ vi.mock("../utils/zip", () => ({
   downloadBlob: vi.fn(),
 }));
 
+const defaultProps = {
+  maxSourcesPerNotebook: 50,
+};
+
 function createResult(chunks: SplitResult["chunks"]): SplitResult {
   return {
     originalName: "source.txt",
@@ -42,6 +46,7 @@ describe("ResultCard", () => {
 
     const { container } = render(
       <ResultCard
+        maxSourcesPerNotebook={defaultProps.maxSourcesPerNotebook}
         result={result}
         placements={[{ notebookNumber: 1, sortOrder: 0, startDate: null, endDate: null }]}
         onRemove={onRemove}
@@ -88,6 +93,7 @@ describe("ResultCard", () => {
 
     render(
       <ResultCard
+        maxSourcesPerNotebook={defaultProps.maxSourcesPerNotebook}
         result={result}
         placements={[
           { notebookNumber: 2, sortOrder: 1, startDate: "2024-05-02", endDate: "2024-05-02" },
@@ -125,5 +131,39 @@ describe("ResultCard", () => {
     expect(downloadBlob).toHaveBeenCalledWith("source.zip", expect.any(Blob));
 
     createElementSpy.mockRestore();
+  });
+
+  it("separates per-file notebook need from global plan placement", () => {
+    const result = createResult(
+      Array.from({ length: 34 }, (_, index) => ({
+        index,
+        content: `chunk ${index + 1}`,
+        wordCount: 10,
+        sizeBytes: 100,
+        fileName: `source_${String(index + 1).padStart(2, "0")}.txt`,
+      })),
+    );
+
+    render(
+      <ResultCard
+        maxSourcesPerNotebook={50}
+        result={result}
+        placements={result.chunks.map((_, index) => ({
+          notebookNumber: index < 16 ? 1 : 2,
+          sortOrder: index,
+          startDate: null,
+          endDate: null,
+        }))}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("1")).toBeTruthy();
+    expect(
+      screen.getByText(/fits within 1 NotebookLM notebook by the source-count limit/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/assigned across notebook 1-2 in the combined import plan/i),
+    ).toBeTruthy();
   });
 });

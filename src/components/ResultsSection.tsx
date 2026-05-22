@@ -138,6 +138,7 @@ export default function ResultsSection({
         {results.map((result, index) => (
           <ResultCard
             key={`${result.originalName}-${index}`}
+            maxSourcesPerNotebook={limits.maxSourcesPerNotebook}
             result={result}
             placements={chunkPlacements[index]}
             onRemove={() => onRemoveResult(index)}
