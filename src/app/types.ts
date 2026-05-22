@@ -30,6 +30,12 @@ export interface LastRunSummary {
   filesProcessed: number;
 }
 
+export interface ProcessingStats {
+  dayKey: string;
+  todayProcessed: number;
+  totalProcessed: number;
+}
+
 export interface NotebookPlan {
   flatChunks: PlannedChunk[];
   sortedChunks: PlannedChunk[];

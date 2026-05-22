@@ -1,6 +1,4 @@
 ARG NODE_VERSION=22.21.1
-ARG NGINX_VERSION=1.29-alpine
-
 FROM node:${NODE_VERSION}-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -12,10 +10,11 @@ COPY public ./public
 COPY src ./src
 RUN npm run build
 
-FROM nginx:${NGINX_VERSION} AS runtime
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+FROM node:${NODE_VERSION}-alpine AS runtime
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+COPY server.mjs ./server.mjs
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.mjs"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
+  CMD wget -q -O /dev/null http://127.0.0.1/health || exit 1

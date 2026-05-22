@@ -1,6 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildArchiveName } from "./app/formatting";
 import { buildNotebookPlan } from "./app/notebookPlan";
+import {
+  fetchProcessingStats,
+  getInitialProcessingStats,
+  recordProcessedFiles,
+} from "./app/processingStats";
 import { processFilesForNotebookLm } from "./app/processFiles";
 import type { LastRunSummary, ProcessingProgress } from "./app/types";
 import { DEFAULT_LIMITS, type SplitLimits, type SplitResult } from "./types";
@@ -13,6 +18,7 @@ import ProcessingPanel from "./components/ProcessingPanel";
 import ResultsSection from "./components/ResultsSection";
 import SettingsPanel from "./components/SettingsPanel";
 import HeroIllustration from "./components/HeroIllustration";
+import FooterStats from "./components/FooterStats";
 
 export default function App() {
   const [limits, setLimits] = useState<SplitLimits>({ ...DEFAULT_LIMITS });
@@ -21,6 +27,8 @@ export default function App() {
   const [processing, setProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastRunSummary, setLastRunSummary] = useState<LastRunSummary | null>(null);
+  const [processingStats, setProcessingStats] = useState(getInitialProcessingStats);
+  const processingStatsRef = useRef(processingStats);
   const [progress, setProgress] = useState<ProcessingProgress>({
     totalFiles: 0,
     completedFiles: 0,
@@ -28,6 +36,24 @@ export default function App() {
     currentFilePercent: 0,
     currentStage: null,
   });
+
+  useEffect(() => {
+    processingStatsRef.current = processingStats;
+  }, [processingStats]);
+
+  useEffect(() => {
+    let active = true;
+
+    void fetchProcessingStats().then((stats) => {
+      if (active) {
+        setProcessingStats(stats);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleFiles = useCallback(async (files: File[]) => {
     setProcessing(true);
@@ -52,6 +78,11 @@ export default function App() {
       }
 
       setLastRunSummary(batch.summary);
+      const nextStats = await recordProcessedFiles(
+        processingStatsRef.current,
+        batch.summary.filesProcessed,
+      );
+      setProcessingStats(nextStats);
     } finally {
       setProcessing(false);
       setProgress({
@@ -161,6 +192,7 @@ export default function App() {
       </main>
 
       <footer className="mx-auto max-w-6xl px-4 pb-8 pt-4">
+        <FooterStats stats={processingStats} />
         <p className="text-center text-xs text-slate-400">
           NotebookLM Splitter · Processing happens locally in your browser, files are never uploaded
         </p>
