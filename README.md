@@ -23,6 +23,7 @@ This repository ships a single-page workflow that runs file preparation in the b
 - `src/utils/filePipeline.ts` accepts supported text-like files and normalizes them into NotebookLM-safe text formats.
 - `src/utils/splitter/` contains the chunking logic for text and JSON sources.
 - `src/app/notebookPlan.ts` sorts chunks into notebook buckets using the configured source-per-notebook limit.
+- `src/app/useAppController.ts` keeps page orchestration separate from the presentational tree.
 - `server.mjs` serves `dist/`, exposes health and stats endpoints, and persists aggregate processing counters under `/data`.
 - The runtime container runs as the unprivileged `node` user and normalizes `PORT` and `STATS_DATA_DIR` before startup.
 
@@ -52,6 +53,8 @@ This repository ships a single-page workflow that runs file preparation in the b
 ### Outputs
 
 - Split results remain in memory until the user downloads the generated archive.
+- ZIP archive creation and blob download happen entirely in the browser, so very large result sets can still spike client-side memory even though the server never sees file contents.
+- Blob URLs are revoked immediately after download to avoid leaking object URLs across repeated exports.
 - The archive structure follows this pattern:
 
 ```text
@@ -194,6 +197,7 @@ The `curl` check applies only when the runtime is actually published to the host
 - `maxFileSizeMB`: `1` to `200`
 - `maxSourcesPerNotebook`: `1` to `50`
 - Files larger than the current `maxFileSizeMB` are rejected before the browser reads them.
+- The browser workflow only supports text-like and JSON inputs; binary formats are intentionally blocked before normalization.
 
 [↩ Back to toc](#table-of-contents)
 
@@ -204,6 +208,7 @@ The `curl` check applies only when the runtime is actually published to the host
 - If `/api/stats` is unavailable, the UI continues with cached local stats and does not block splitting.
 - If notification permission is denied or unsupported, the app continues without desktop notifications.
 - If processing is canceled, completed files stay in results, remaining queued files stay untouched, and the UI reports that the split process stopped.
+- The runtime only reads and writes the stats file under the configured data directory; invalid `PORT` or `STATS_DATA_DIR` values fall back to safe defaults and are logged by the server.
 - The Compose stack is internal-only by default, so `docker compose up` alone does not make the app reachable from the host browser.
 
 [↩ Back to toc](#table-of-contents)

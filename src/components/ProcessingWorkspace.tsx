@@ -11,6 +11,8 @@ import SettingsPanel from "./SettingsPanel";
 
 interface Props {
   errorMessage: string | null;
+  failureFileName: string | null;
+  failureStage: "preparing" | "splitting" | null;
   handleFiles: (files: File[]) => Promise<void>;
   limits: SplitLimits;
   notificationPermission: BrowserNotificationPermission;
@@ -40,6 +42,8 @@ interface Props {
 export default function ProcessingWorkspace(props: Props) {
   const {
     errorMessage,
+    failureFileName,
+    failureStage,
     handleFiles,
     limits,
     notificationPermission,
@@ -74,7 +78,16 @@ export default function ProcessingWorkspace(props: Props) {
             <DropZone onFiles={handleFiles} />
             {errorMessage && (
               <div className="mt-3 rounded-[1.4rem] border-2 border-red-500 bg-[#fff1f2] px-4 py-3">
-                <p className="text-sm font-semibold text-red-700">Failed to process file</p>
+                <p className="text-sm font-semibold text-red-700">
+                  {failureStage
+                    ? `Failed during ${failureStage === "preparing" ? "file preparation" : "combined splitting"}`
+                    : "Failed to process file"}
+                </p>
+                {failureFileName && (
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-red-500">
+                    {failureFileName}
+                  </p>
+                )}
                 <p className="mt-1 break-words text-xs text-red-600">{errorMessage}</p>
               </div>
             )}

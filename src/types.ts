@@ -105,4 +105,6 @@ export interface ProcessedFileBatch {
   summary: LastRunSummary;
   canceled: boolean;
   completedQueueIds: string[];
+  failureStage?: "preparing" | "splitting";
+  failureFileName?: string | null;
 }

@@ -20,6 +20,16 @@ const BASE_SECURITY_HEADERS = {
   "X-Frame-Options": "DENY",
 };
 
+function logStatsFailure(action, error, extra = {}) {
+  const payload = {
+    event: "stats_failure",
+    action,
+    error: error instanceof Error ? error.message : String(error),
+    ...extra,
+  };
+  console.warn(JSON.stringify(payload));
+}
+
 export function normalizePort(rawPort, fallbackPort = DEFAULT_PORT) {
   if (rawPort === undefined || rawPort === null || rawPort === "") {
     return fallbackPort;
@@ -262,18 +272,25 @@ export function createNotebooklmServer({
       const raw = await readFile(statsFile, "utf8");
       const parsed = JSON.parse(raw);
       if (!isStatsRecord(parsed)) {
+        logStatsFailure("read", new Error("Invalid stats payload on disk"));
         return createEmptyStats();
       }
 
       return normalizeStats(parsed);
-    } catch {
+    } catch (error) {
+      logStatsFailure("read", error, { file: statsFile });
       return createEmptyStats();
     }
   }
 
   async function writeStats(stats) {
     await ensureDataDir();
-    await writeFile(statsFile, JSON.stringify(stats, null, 2));
+    try {
+      await writeFile(statsFile, JSON.stringify(stats, null, 2));
+    } catch (error) {
+      logStatsFailure("write", error, { file: statsFile });
+      throw error;
+    }
   }
 
   async function recordProcessedFiles(filesProcessed) {
@@ -306,9 +323,16 @@ export function createNotebooklmServer({
     }
 
     if (method === "GET" && url === "/api/stats") {
-      const stats = await readStats();
-      await writeStats(stats);
-      writeJson(response, 200, stats);
+      try {
+        const stats = await readStats();
+        await writeStats(stats);
+        writeJson(response, 200, stats);
+      } catch (error) {
+        logStatsFailure("api_read", error, { route: "/api/stats" });
+        writeJson(response, 500, {
+          error: "Failed to load stats",
+        });
+      }
       return;
     }
 
@@ -330,8 +354,15 @@ export function createNotebooklmServer({
           return;
         }
 
-        const stats = await recordProcessedFiles(processedFiles);
-        writeJson(response, 200, stats);
+        try {
+          const stats = await recordProcessedFiles(processedFiles);
+          writeJson(response, 200, stats);
+        } catch (error) {
+          logStatsFailure("record", error, { route: "/api/stats/record" });
+          writeJson(response, 500, {
+            error: "Failed to record stats",
+          });
+        }
       } catch (error) {
         writeJson(response, 400, {
           error: error instanceof Error ? error.message : "Invalid request",

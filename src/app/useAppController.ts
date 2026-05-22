@@ -129,6 +129,8 @@ export function useAppController() {
   return {
     activeJsonFieldConfig,
     errorMessage: processing.errorMessage,
+    failureFileName: processing.failureFileName,
+    failureStage: processing.failureStage,
     handleFiles,
     limits,
     notificationPermission,

@@ -49,6 +49,8 @@ Assumptions:
 - `STATS_DATA_DIR` defaults to `/data` and is resolved to an absolute path before startup.
 - Compose uses a named volume for persisted stats and does not publish a host port by default.
 - The runtime container runs as the unprivileged `node` user and only writes to the mounted data directory.
+- Stats read/write failures are emitted as concise JSON log lines with `event=stats_failure`, `action`, and `error` fields.
+- Browser-side ZIP downloads are memory-bound; if exports become large, expect client memory pressure rather than server-side backpressure.
 
 [↑ Back to top](#top)
 
@@ -78,6 +80,7 @@ Notes:
 
 - `POST /api/stats/record` requires `Content-Type: application/json`.
 - `filesProcessed` must be a non-negative integer or the server returns `4xx`.
+- When the server cannot read or write the persisted stats file, it logs a structured failure and returns a `500` for the affected request.
 - These `curl` examples work only when the runtime is published to the host or executed directly outside the internal-only Compose network.
 - The health check used by Docker calls `http://127.0.0.1/health` inside the container, so a healthy container does not imply host reachability.
 
@@ -89,6 +92,7 @@ Notes:
 - Compose mounts `/data` from the named volume `stats-data`.
 - The server sends basic hardening headers on static and API responses.
 - Frontend code also caches stats in browser `localStorage`, so the UI can still render counters when the backend is temporarily unavailable.
+- The browser will reject oversized files before `FileReader` runs, so uploads should be validated at the UI boundary first.
 
 Quick checks:
 
@@ -107,6 +111,8 @@ docker volume ls | grep stats-data
   Cause: the `stats-data` volume was removed, or the runtime started with a different `STATS_DATA_DIR`.
 - Split counters look stale after backend issues:
   Cause: the UI fell back to cached browser stats because `/api/stats` did not return a valid payload.
+- Exports feel memory-heavy or stall in the browser:
+  Cause: ZIP assembly is client-side and large archives are limited by browser memory, not by the runtime server.
 - `npm ci` fails in a dirty local environment:
   Cause: dependency or cache issues outside the repo; check the npm cache path and lockfile state before editing manifests.
 

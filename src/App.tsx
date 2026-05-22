@@ -16,6 +16,8 @@ export default function App() {
         <HeroSection />
         <ProcessingWorkspace
           errorMessage={app.errorMessage}
+          failureFileName={app.failureFileName}
+          failureStage={app.failureStage}
           handleFiles={app.handleFiles}
           limits={app.limits}
           notificationPermission={app.notificationPermission}

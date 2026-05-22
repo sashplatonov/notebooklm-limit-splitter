@@ -24,6 +24,11 @@ const EMPTY_PROGRESS: ProcessingProgress = {
   currentStage: null,
 };
 
+interface ProcessingFailureState {
+  stage: "preparing" | "splitting" | null;
+  fileName: string | null;
+}
+
 export function useProcessingRunner(args: Args) {
   const {
     limits,
@@ -38,6 +43,7 @@ export function useProcessingRunner(args: Args) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const [processing, setProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [failureState, setFailureState] = useState<ProcessingFailureState>({ stage: null, fileName: null });
   const [progress, setProgress] = useState<ProcessingProgress>(EMPTY_PROGRESS);
 
   const startProcessing = useCallback(() => {
@@ -49,6 +55,7 @@ export function useProcessingRunner(args: Args) {
     abortControllerRef.current = controller;
     setProcessing(true);
     setErrorMessage(null);
+    setFailureState({ stage: null, fileName: null });
     setLastRunSummary(null);
 
     void processFilesForNotebookLm({
@@ -64,8 +71,13 @@ export function useProcessingRunner(args: Args) {
       removeCompletedImports(batch.completedQueueIds);
       if (batch.errors.length > 0) {
         setErrorMessage(batch.errors.join(" "));
+        setFailureState({
+          stage: batch.failureStage ?? null,
+          fileName: batch.failureFileName ?? null,
+        });
       } else if (batch.canceled) {
         setErrorMessage("Split process stopped. Remaining queued files were left untouched.");
+        setFailureState({ stage: null, fileName: null });
       }
 
       setLastRunSummary(batch.summary);
@@ -97,5 +109,13 @@ export function useProcessingRunner(args: Args) {
     abortControllerRef.current?.abort();
   }, []);
 
-  return { errorMessage, processing, progress, startProcessing, stopProcessing };
+  return {
+    errorMessage,
+    failureStage: failureState.stage,
+    failureFileName: failureState.fileName,
+    processing,
+    progress,
+    startProcessing,
+    stopProcessing,
+  };
 }

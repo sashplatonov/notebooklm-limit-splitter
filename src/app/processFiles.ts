@@ -1,5 +1,4 @@
 import type { SplitLimits, SplitResult } from "../types";
-import { prepareFileForNotebookLm, type PreparedFile } from "../utils/filePipeline";
 import { splitFile } from "../utils/splitter";
 import {
   ProcessingAbortedError,
@@ -11,6 +10,7 @@ import {
 } from "../utils/splitter/shared";
 import { splitTextSegments } from "../utils/splitter/text";
 import { createSummary } from "./formatting";
+import { processQueuedItems, type PreparedBatchItem } from "./processQueue";
 import type { ProcessedFileBatch, ProcessingProgress, QueuedImportItem } from "./types";
 
 interface ProcessFilesArgs {
@@ -26,20 +26,6 @@ interface ProgressSnapshot {
   currentFileName: string | null;
   currentFilePercent: number;
   currentStage: string;
-}
-
-interface ProcessSingleItemArgs {
-  index: number;
-  item: QueuedImportItem;
-  itemCount: number;
-  onProgress: (progress: ProcessingProgress) => void;
-  maxFileSizeBytes: number;
-  signal?: AbortSignal;
-}
-
-interface PreparedBatchItem {
-  item: QueuedImportItem;
-  prepared: PreparedFile;
 }
 
 function buildProgress(progress: ProcessingProgress): ProcessingProgress {
@@ -72,28 +58,6 @@ function emitQueueProgress(
   }));
 }
 
-async function processSingleItem({
-  index,
-  item,
-  itemCount,
-  onProgress,
-  maxFileSizeBytes,
-  signal,
-}: ProcessSingleItemArgs): Promise<PreparedFile> {
-  const { file, fileName, selectedJsonFields } = item;
-  const prepared = await prepareFileForNotebookLm(file, { selectedJsonFields, maxFileSizeBytes });
-  emitQueueProgress(onProgress, {
-    itemCount,
-    completedFiles: index,
-    currentFileName: fileName,
-    currentFilePercent: 5,
-    currentStage: "File loaded",
-  });
-  await yieldToProcessingTask(signal);
-
-  return prepared;
-}
-
 function buildCombinedBaseName(items: QueuedImportItem[]): string {
   if (items.length === 1) {
     return items[0].fileName.replace(/\.[^/.]+$/, "") || "import";
@@ -106,11 +70,7 @@ function buildCombinedBaseName(items: QueuedImportItem[]): string {
 function buildCombinedSegments(preparedItems: PreparedBatchItem[]): string[] {
   return preparedItems.flatMap(({ item, prepared }, index) => {
     const separator = `=== FILE: ${item.fileName} ===\n`;
-    if (index === 0) {
-      return [separator, prepared.content];
-    }
-
-    return [`\n\n${separator}`, prepared.content];
+    return index === 0 ? [separator, prepared.content] : [`\n\n${separator}`, prepared.content];
   });
 }
 
@@ -209,75 +169,25 @@ export async function processFilesForNotebookLm({
   signal,
 }: ProcessFilesArgs): Promise<ProcessedFileBatch> {
   const startedAt = new Date().toISOString();
-  const results: ProcessedFileBatch["results"] = [];
-  const errors: string[] = [];
-  const completedQueueIds: string[] = [];
-  const preparedItems: PreparedBatchItem[] = [];
-  let canceled = false;
-
-  emitQueueProgress(onProgress, {
-    itemCount: items.length,
-    completedFiles: 0,
-    currentFileName: items[0]?.fileName ?? null,
-    currentFilePercent: 0,
-    currentStage: "Waiting to start",
+  const preparedBatch = await processQueuedItems({
+    items,
+    limits,
+    onProgress,
+    signal,
   });
-  await yieldToProcessingTask(signal);
+  const results: ProcessedFileBatch["results"] = [];
+  const errors = [...preparedBatch.errors];
+  let canceled = preparedBatch.canceled;
+  let failureStage = preparedBatch.failureStage;
+  let failureFileName = preparedBatch.failureFileName;
 
-  for (const [index, item] of items.entries()) {
-    const { fileName, queueId } = item;
-    emitQueueProgress(onProgress, {
-      itemCount: items.length,
-      completedFiles: index,
-      currentFileName: fileName,
-      currentFilePercent: 0,
-      currentStage: "Preparing file",
-    });
-    try {
-      await yieldToProcessingTask(signal);
-      throwIfAborted(signal);
-      const result = await processSingleItem({
-        index,
-        item,
-        itemCount: items.length,
-        onProgress,
-        maxFileSizeBytes: limits.maxFileSizeMB * 1024 * 1024,
-        signal,
-      });
-      preparedItems.push({
-        item,
-        prepared: result,
-      });
-      completedQueueIds.push(queueId);
-    } catch (error) {
-      if (error instanceof ProcessingAbortedError) {
-        canceled = true;
-        break;
-      }
-      const message = error instanceof Error ? error.message : "Unknown error";
-      errors.push(`${fileName}: ${message}`);
-      completedQueueIds.push(queueId);
-    }
-
-    const nextFileName = index + 1 < items.length ? items[index + 1].fileName : null;
-    const nextPercent = index + 1 < items.length ? 0 : 100;
-    const nextStage = index + 1 < items.length ? "Queued" : "Prepared";
-    emitQueueProgress(onProgress, {
-      itemCount: items.length,
-      completedFiles: index + 1,
-      currentFileName: nextFileName,
-      currentFilePercent: nextPercent,
-      currentStage: nextStage,
-    });
-  }
-
-  if (!canceled && preparedItems.length > 0) {
+  if (!canceled && preparedBatch.preparedItems.length > 0) {
     const combinedStartedAt = new Date().toISOString();
     try {
       await yieldToProcessingTask(signal);
       throwIfAborted(signal);
       const combinedResult = await processCombinedItems({
-        preparedItems,
+        preparedItems: preparedBatch.preparedItems,
         itemCount: items.length,
         limits,
         onProgress,
@@ -285,7 +195,7 @@ export async function processFilesForNotebookLm({
       });
       results.push({
         ...combinedResult,
-        importSummary: createSummary(combinedStartedAt, preparedItems.length),
+        importSummary: createSummary(combinedStartedAt, preparedBatch.preparedItems.length),
       });
       emitQueueProgress(onProgress, {
         itemCount: items.length,
@@ -299,6 +209,8 @@ export async function processFilesForNotebookLm({
         canceled = true;
       } else {
         const message = error instanceof Error ? error.message : "Unknown error";
+        failureStage ??= "splitting";
+        failureFileName ??= preparedBatch.preparedItems[0]?.item.fileName ?? null;
         errors.push(`Combined import: ${message}`);
       }
     }
@@ -307,8 +219,10 @@ export async function processFilesForNotebookLm({
   return {
     results,
     errors,
-    summary: createSummary(startedAt, completedQueueIds.length),
+    summary: createSummary(startedAt, preparedBatch.completedQueueIds.length),
     canceled,
-    completedQueueIds,
+    completedQueueIds: preparedBatch.completedQueueIds,
+    failureStage,
+    failureFileName,
   };
 }
