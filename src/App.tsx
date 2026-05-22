@@ -10,6 +10,7 @@ import {
 import { buildArchiveName } from "./app/formatting";
 import { buildNotebookPlan } from "./app/notebookPlan";
 import { fetchProcessingStats, getInitialProcessingStats } from "./app/processingStats";
+import { getInitialSplitLimits, persistSplitLimits } from "./app/splitLimitsStorage";
 import { useImportQueue } from "./app/useImportQueue";
 import { useProcessingRunner } from "./app/useProcessingRunner";
 import type { LastRunSummary } from "./app/types";
@@ -38,7 +39,7 @@ function downloadArchiveForResults(
 }
 
 export default function App() {
-  const [limits, setLimits] = useState<SplitLimits>({ ...DEFAULT_LIMITS });
+  const [limits, setLimits] = useState<SplitLimits>(getInitialSplitLimits);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [results, setResults] = useState<SplitResult[]>([]);
   const [lastRunSummary, setLastRunSummary] = useState<LastRunSummary | null>(null);
@@ -77,6 +78,10 @@ export default function App() {
       window.removeEventListener("focus", syncNotificationState);
     };
   }, []);
+
+  useEffect(() => {
+    persistSplitLimits(limits);
+  }, [limits]);
 
   const queue = useImportQueue();
   const processing = useProcessingRunner({
