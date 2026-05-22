@@ -76,8 +76,7 @@ describe("processingStats", () => {
         totalProcessed: 42,
       }),
     };
-    const fetchMock = vi
-      .spyOn(window, "fetch")
+    vi.spyOn(window, "fetch")
       .mockResolvedValueOnce(invalidResponse as Response)
       .mockResolvedValueOnce(validResponse as Response);
 

@@ -1,173 +1,164 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  readFileAsText,
+  INPUT_EXTENSIONS,
   inspectJsonFile,
   prepareFileForNotebookLm,
+  readFileAsText,
   validateFileBeforeRead,
-  INPUT_EXTENSIONS,
 } from "./filePipeline";
 
-// Helper to create a mock file with content
 function createMockFile(content: string, name: string, type?: string): File {
-  const file = new File([content], name, { type: type ?? "text/plain" });
-  (file as any)._content = content;
-  return file;
+  return new File([content], name, { type: type ?? "text/plain" });
 }
 
 describe("filePipeline", () => {
+  registerReadFileAsTextTests();
+  registerInspectJsonFileTests();
+  registerPrepareFileTests();
+  registerValidationTests();
+  registerInputExtensionsTests();
+});
+
+function registerReadFileAsTextTests(): void {
   describe("readFileAsText", () => {
     it("reads file content as text", async () => {
       const content = "Hello, World!";
-      const file = createMockFile(content, "test.txt");
-      const result = await readFileAsText(file);
+      const result = await readFileAsText(createMockFile(content, "test.txt"));
       expect(result).toBe(content);
     });
 
     it("rejects on read error", async () => {
-      const file = createMockFile("", "test.txt");
-      // Mock FileReader to trigger error
-      const originalFileReader = global.FileReader;
+      const originalFileReader = globalThis.FileReader;
+
       class ErrorFileReader {
         result: string | ArrayBuffer | null = null;
         error: DOMException | null = null;
-        onload: any = null;
-        onerror: any = null;
-        readAsText() {
-          setTimeout(() => this.onerror?.({ target: this }), 0);
+        onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => void) | null = null;
+        onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => void) | null = null;
+
+        readAsText(): void {
+          this.onerror?.call(this as unknown as FileReader, new ProgressEvent("error"));
         }
       }
-      (global as any).FileReader = ErrorFileReader;
-      
-      await expect(readFileAsText(file)).rejects.toThrow();
-      
-      (global as any).FileReader = originalFileReader;
+
+      Object.defineProperty(globalThis, "FileReader", {
+        configurable: true,
+        writable: true,
+        value: ErrorFileReader as typeof FileReader,
+      });
+
+      await expect(readFileAsText(createMockFile("", "test.txt"))).rejects.toThrow();
+
+      Object.defineProperty(globalThis, "FileReader", {
+        configurable: true,
+        writable: true,
+        value: originalFileReader,
+      });
     });
   });
+}
 
+function registerInspectJsonFileTests(): void {
   describe("inspectJsonFile", () => {
     it("returns null for non-JSON files", async () => {
-      const file = new File(["text"], "test.txt", { type: "text/plain" });
-      const result = await inspectJsonFile(file);
+      const result = await inspectJsonFile(new File(["text"], "test.txt", { type: "text/plain" }));
       expect(result).toBeNull();
     });
 
     it("extracts field options from JSON file", async () => {
       const json = JSON.stringify({ name: "test", count: 42, nested: { value: "hello" } });
-      const file = new File([json], "test.json", { type: "application/json" });
-      const result = await inspectJsonFile(file);
-      expect(result).not.toBeNull();
-      expect(result!.fieldOptions).toEqual(
+      const result = await inspectJsonFile(new File([json], "test.json", { type: "application/json" }));
+      expect(result?.fieldOptions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ path: "name" }),
           expect.objectContaining({ path: "count" }),
           expect.objectContaining({ path: "nested.value" }),
-        ])
+        ]),
       );
     });
 
     it("handles arrays in JSON", async () => {
       const json = JSON.stringify({ items: [{ id: 1 }, { id: 2 }] });
-      const file = new File([json], "test.json", { type: "application/json" });
-      const result = await inspectJsonFile(file);
-      expect(result).not.toBeNull();
-      expect(result!.fieldOptions).toEqual(
+      const result = await inspectJsonFile(new File([json], "test.json", { type: "application/json" }));
+      expect(result?.fieldOptions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ path: "items.id" }),
-        ])
+        ]),
       );
     });
 
     it("rejects oversized JSON files before reading them", async () => {
       const json = JSON.stringify({ message: "too large" });
-      const file = new File([json], "test.json", { type: "application/json" });
-
-      await expect(inspectJsonFile(file, 1)).rejects.toThrow(/pre-read limit/);
+      await expect(
+        inspectJsonFile(new File([json], "test.json", { type: "application/json" }), 1),
+      ).rejects.toThrow(/pre-read limit/);
     });
   });
+}
 
+function registerPrepareFileTests(): void {
   describe("prepareFileForNotebookLm", () => {
     it("normalizes JSON files with selected fields", async () => {
       const json = JSON.stringify({ name: "test", count: 42, extra: "remove" });
-      const file = new File([json], "test.json", { type: "application/json" });
-      const result = await prepareFileForNotebookLm(file, { selectedJsonFields: ["name", "count"] });
+      const result = await prepareFileForNotebookLm(
+        new File([json], "test.json", { type: "application/json" }),
+        { selectedJsonFields: ["name", "count"] },
+      );
+
       expect(result.originalName).toBe("test.json");
       expect(result.normalizedName).toBe("test.txt");
       expect(result.outputFormat).toBe("txt");
       expect(result.sourceKind).toBe("json");
-      const parsed = JSON.parse(result.content);
-      expect(parsed).toEqual({ name: "test", count: 42 });
+      expect(JSON.parse(result.content)).toEqual({ name: "test", count: 42 });
     });
 
-    it("normalizes markdown files", async () => {
-      const content = "# Hello\n\nWorld";
-      const file = new File([content], "test.md", { type: "text/markdown" });
-      const result = await prepareFileForNotebookLm(file);
-      expect(result.originalName).toBe("test.md");
-      expect(result.normalizedName).toBe("test.md");
-      expect(result.outputFormat).toBe("md");
-      expect(result.sourceKind).toBe("text");
-    });
+    it("normalizes markdown, csv, and plain text files", async () => {
+      const markdown = await prepareFileForNotebookLm(new File(["# Hello\n\nWorld"], "test.md", { type: "text/markdown" }));
+      const csv = await prepareFileForNotebookLm(new File(["a,b,c\n1,2,3"], "test.csv", { type: "text/csv" }));
+      const text = await prepareFileForNotebookLm(new File(["Plain text content"], "test.txt", { type: "text/plain" }));
 
-    it("normalizes CSV files", async () => {
-      const content = "a,b,c\n1,2,3";
-      const file = new File([content], "test.csv", { type: "text/csv" });
-      const result = await prepareFileForNotebookLm(file);
-      expect(result.originalName).toBe("test.csv");
-      expect(result.normalizedName).toBe("test.csv");
-      expect(result.outputFormat).toBe("csv");
-    });
-
-    it("normalizes text files", async () => {
-      const content = "Plain text content";
-      const file = new File([content], "test.txt", { type: "text/plain" });
-      const result = await prepareFileForNotebookLm(file);
-      expect(result.originalName).toBe("test.txt");
-      expect(result.normalizedName).toBe("test.txt");
-      expect(result.outputFormat).toBe("txt");
+      expect(markdown).toMatchObject({ normalizedName: "test.md", outputFormat: "md", sourceKind: "text" });
+      expect(csv).toMatchObject({ normalizedName: "test.csv", outputFormat: "csv" });
+      expect(text).toMatchObject({ normalizedName: "test.txt", outputFormat: "txt" });
     });
 
     it("rejects binary files without text MIME type", async () => {
       const file = new File([new Uint8Array([1, 2, 3])], "test.pdf", { type: "application/pdf" });
       await expect(prepareFileForNotebookLm(file)).rejects.toThrow(
-        "This browser-only mode can currently normalize only text-based and JSON files"
+        "This browser-only mode can currently normalize only text-based and JSON files",
       );
     });
 
-    it("accepts files with text-like MIME types", async () => {
-      const content = "XML content";
-      const file = new File([content], "test.xml", { type: "application/xml" });
-      const result = await prepareFileForNotebookLm(file);
-      expect(result.content).toBe(content);
-    });
+    it("accepts files with text-like MIME types and invalid json", async () => {
+      const xml = await prepareFileForNotebookLm(new File(["XML content"], "test.xml", { type: "application/xml" }));
+      const invalidJson = await prepareFileForNotebookLm(new File(["not valid json"], "test.json", { type: "application/json" }));
 
-    it("handles invalid JSON gracefully", async () => {
-      const file = new File(["not valid json"], "test.json", { type: "application/json" });
-      const result = await prepareFileForNotebookLm(file);
-      expect(result.content).toBe("not valid json");
+      expect(xml.content).toBe("XML content");
+      expect(invalidJson.content).toBe("not valid json");
     });
 
     it("rejects oversized files before reading them", async () => {
       const file = new File(["plain text"], "test.txt", { type: "text/plain" });
-      await expect(prepareFileForNotebookLm(file, { maxFileSizeBytes: 1 })).rejects.toThrow(
-        /pre-read limit/,
-      );
+      await expect(prepareFileForNotebookLm(file, { maxFileSizeBytes: 1 })).rejects.toThrow(/pre-read limit/);
     });
   });
+}
 
+function registerValidationTests(): void {
   describe("validateFileBeforeRead", () => {
     it("returns a validation error for unsupported files", () => {
       const file = new File([new Uint8Array([1, 2, 3])], "test.pdf", { type: "application/pdf" });
-      const validationError = validateFileBeforeRead(file, 1024);
-      expect(validationError?.reason).toContain("Binary formats");
+      expect(validateFileBeforeRead(file, 1024)?.reason).toContain("Binary formats");
     });
 
     it("returns a validation error for oversized files", () => {
       const file = new File(["plain text"], "test.txt", { type: "text/plain" });
-      const validationError = validateFileBeforeRead(file, 1);
-      expect(validationError?.reason).toContain("pre-read limit");
+      expect(validateFileBeforeRead(file, 1)?.reason).toContain("pre-read limit");
     });
   });
+}
 
+function registerInputExtensionsTests(): void {
   describe("INPUT_EXTENSIONS", () => {
     it("contains expected extensions", () => {
       expect(INPUT_EXTENSIONS).toContain(".json");
@@ -176,4 +167,4 @@ describe("filePipeline", () => {
       expect(INPUT_EXTENSIONS).toContain(".csv");
     });
   });
-});
+}

@@ -8,6 +8,16 @@ vi.mock("../utils/splitter", () => ({
   formatNumber: (value: number) => String(value),
 }));
 
+interface HarnessProps {
+  initialLimits?: SplitLimits;
+  initialOpen?: boolean;
+  notificationPermission: "unsupported" | NotificationPermission;
+  notificationsEnabled: boolean;
+  notificationRequestPending?: boolean;
+  onDisableNotifications?: () => void;
+  onEnableNotifications?: () => void;
+}
+
 function Harness({
   initialLimits = DEFAULT_LIMITS,
   initialOpen = true,
@@ -16,15 +26,7 @@ function Harness({
   notificationRequestPending = false,
   onDisableNotifications = vi.fn(),
   onEnableNotifications = vi.fn(),
-}: {
-  initialLimits?: SplitLimits;
-  initialOpen?: boolean;
-  notificationPermission: "unsupported" | NotificationPermission;
-  notificationsEnabled: boolean;
-  notificationRequestPending?: boolean;
-  onDisableNotifications?: () => void;
-  onEnableNotifications?: () => void;
-}): JSX.Element {
+}: HarnessProps): React.JSX.Element {
   const [limits, setLimits] = useState(initialLimits);
   const [open, setOpen] = useState(initialOpen);
 
@@ -41,6 +43,16 @@ function Harness({
       onToggle={() => setOpen((previous) => !previous)}
     />
   );
+}
+
+function getInputGroup(role: "spinbutton" | "slider"): HTMLInputElement[] {
+  return screen.getAllByRole(role).map((element) => {
+    if (!(element instanceof HTMLInputElement)) {
+      throw new Error(`Expected ${role} to be an input element`);
+    }
+
+    return element;
+  });
 }
 
 describe("SettingsPanel", () => {
@@ -74,10 +86,8 @@ describe("SettingsPanel", () => {
       />,
     );
 
-    const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-    const rangeInputs = screen.getAllByRole("slider") as HTMLInputElement[];
-    const wordsInput = numberInputs[0];
-    const wordsSlider = rangeInputs[0];
+    const [wordsInput] = getInputGroup("spinbutton");
+    const [wordsSlider] = getInputGroup("slider");
 
     fireEvent.change(wordsInput, { target: { value: "250000" } });
     expect(wordsInput.value).toBe("250000");
@@ -93,26 +103,21 @@ describe("SettingsPanel", () => {
   });
 
   it("shows notification states for enabled, blocked, and unsupported browsers", () => {
-    const enabledCallbacks = {
-      disable: vi.fn(),
-    };
+    const onDisableNotifications = vi.fn();
 
     render(
       <Harness
         notificationPermission="granted"
         notificationsEnabled={true}
-        onDisableNotifications={enabledCallbacks.disable}
+        onDisableNotifications={onDisableNotifications}
       />,
     );
 
     expect(screen.getByText("Enabled")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /disable notifications/i })).toBeTruthy();
-
     fireEvent.click(screen.getByRole("button", { name: /disable notifications/i }));
-    expect(enabledCallbacks.disable).toHaveBeenCalledTimes(1);
-  });
+    expect(onDisableNotifications).toHaveBeenCalledTimes(1);
 
-  it("shows blocked and unsupported notification states", () => {
+    cleanup();
     render(
       <Harness
         notificationPermission="denied"
@@ -132,7 +137,7 @@ describe("SettingsPanel", () => {
       />,
     );
 
-    expect(screen.getAllByText("Unavailable in this browser")).toHaveLength(1);
+    expect(screen.getByText("Unavailable in this browser")).toBeTruthy();
     expect(screen.getByText(/does not expose the notification api/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /enable notifications/i })).toBeNull();
   });

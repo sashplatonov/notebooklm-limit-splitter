@@ -1,64 +1,70 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import QueuedFilesPanel from "./QueuedFilesPanel";
 import type { QueuedImportItem } from "../app/types";
 
-// Mock formatBytes
 vi.mock("../utils/splitter", () => ({
   formatBytes: (bytes: number) => `${bytes} B`,
 }));
 
-describe("QueuedFilesPanel", () => {
-  const mockOnClear = vi.fn();
-  const mockOnEditJsonFields = vi.fn();
-  const mockOnRemove = vi.fn();
-  const mockOnStart = vi.fn();
+const mockOnClear = vi.fn();
+const mockOnEditJsonFields = vi.fn();
+const mockOnRemove = vi.fn();
+const mockOnStart = vi.fn();
 
-  const createMockFile = (name: string, size: number): File => {
-    return new File(["content"], name, { type: "text/plain" });
-  };
+function createMockFile(name: string): File {
+  return new File(["content"], name, { type: "text/plain" });
+}
 
-  const createMockItem = (overrides: Partial<QueuedImportItem> = {}): QueuedImportItem => ({
+function createFieldOption(path: string) {
+  return { path, sampleValue: `${path} value` };
+}
+
+function createMockItem(overrides: Partial<QueuedImportItem> = {}): QueuedImportItem {
+  return {
     queueId: "test-id",
-    file: createMockFile("test.txt", 100),
+    file: createMockFile("test.txt"),
     fileName: "test.txt",
     fieldOptions: [],
     selectedJsonFields: [],
     ...overrides,
-  });
+  };
+}
 
+function renderPanel(items: QueuedImportItem[], processing = false) {
+  return render(
+    <QueuedFilesPanel
+      items={items}
+      onClear={mockOnClear}
+      onEditJsonFields={mockOnEditJsonFields}
+      onRemove={mockOnRemove}
+      onStart={mockOnStart}
+      processing={processing}
+    />,
+  );
+}
+
+describe("QueuedFilesPanel", () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
+  registerRenderingTests();
+  registerSelectionLabelTests();
+  registerActionTests();
+  registerProcessingStateTests();
+});
+
+function registerRenderingTests(): void {
   describe("rendering", () => {
     it("returns null when no items", () => {
-      const { container } = render(
-        <QueuedFilesPanel
-          items={[]}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
+      const { container } = renderPanel([]);
       expect(container.firstChild).toBeNull();
     });
 
     it("renders panel with items", () => {
-      const items = [createMockItem()];
-      render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
+      renderPanel([createMockItem()]);
 
       expect(screen.getByText("Ready to split")).toBeTruthy();
       expect(screen.getByText(/1 queued file/)).toBeTruthy();
@@ -66,213 +72,92 @@ describe("QueuedFilesPanel", () => {
     });
 
     it("renders plural file count", () => {
-      const items = [createMockItem({ queueId: "id1" }), createMockItem({ queueId: "id2" })];
-      render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
+      renderPanel([createMockItem({ queueId: "id1" }), createMockItem({ queueId: "id2" })]);
       expect(screen.getByText(/2 queued files/)).toBeTruthy();
     });
   });
+}
 
+function registerSelectionLabelTests(): void {
   describe("selection label", () => {
     it("shows 'No JSON field filter' when no field options", () => {
-      const items = [createMockItem()];
-      render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
-      const elements = screen.getAllByText(/No JSON field filter/);
-      expect(elements.length).toBeGreaterThan(0);
+      renderPanel([createMockItem()]);
+      expect(screen.getAllByText(/No JSON field filter/).length).toBeGreaterThan(0);
     });
 
     it("shows 'All JSON fields selected' when all fields selected", () => {
-      const items = [
+      renderPanel([
         createMockItem({
-          fieldOptions: ["field1", "field2"],
+          fieldOptions: [createFieldOption("field1"), createFieldOption("field2")],
           selectedJsonFields: ["field1", "field2"],
         }),
-      ];
-      render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
-      const elements = screen.getAllByText(/All JSON fields selected/);
-      expect(elements.length).toBeGreaterThan(0);
+      ]);
+      expect(screen.getAllByText(/All JSON fields selected/).length).toBeGreaterThan(0);
     });
 
     it("shows partial selection count", () => {
-      const items = [
+      renderPanel([
         createMockItem({
-          fieldOptions: ["field1", "field2", "field3"],
+          fieldOptions: [createFieldOption("field1"), createFieldOption("field2"), createFieldOption("field3")],
           selectedJsonFields: ["field1"],
         }),
-      ];
-      render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
-      const elements = screen.getAllByText(/1 of 3 JSON fields selected/);
-      expect(elements.length).toBeGreaterThan(0);
+      ]);
+      expect(screen.getAllByText(/1 of 3 JSON fields selected/).length).toBeGreaterThan(0);
     });
   });
+}
 
+function registerActionTests(): void {
   describe("actions", () => {
     it("calls onClear when Clear queue button clicked", () => {
-      const items = [createMockItem()];
-      const { container } = render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
-      const buttons = container.querySelectorAll("button");
-      const clearBtn = Array.from(buttons).find((btn) => btn.textContent === "Clear queue");
-      fireEvent.click(clearBtn!);
+      renderPanel([createMockItem()]);
+      fireEvent.click(screen.getByRole("button", { name: "Clear queue" }));
       expect(mockOnClear).toHaveBeenCalledTimes(1);
     });
 
     it("calls onStart when Start split button clicked", () => {
-      const items = [createMockItem()];
-      const { container } = render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
-      const buttons = container.querySelectorAll("button");
-      const startBtn = Array.from(buttons).find((btn) => btn.textContent === "Start split");
-      fireEvent.click(startBtn!);
+      renderPanel([createMockItem()]);
+      fireEvent.click(screen.getByRole("button", { name: "Start split" }));
       expect(mockOnStart).toHaveBeenCalledTimes(1);
     });
 
     it("calls onRemove when Remove button clicked", () => {
-      const items = [createMockItem()];
-      const { container } = render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
-      const buttons = container.querySelectorAll("button");
-      const removeBtn = Array.from(buttons).find((btn) => btn.textContent === "Remove");
-      fireEvent.click(removeBtn!);
+      renderPanel([createMockItem()]);
+      fireEvent.click(screen.getByRole("button", { name: "Remove" }));
       expect(mockOnRemove).toHaveBeenCalledWith("test-id");
     });
 
     it("calls onEditJsonFields when Choose fields button clicked", () => {
-      const items = [
+      renderPanel([
         createMockItem({
-          fieldOptions: ["field1"],
+          fieldOptions: [createFieldOption("field1")],
           selectedJsonFields: [],
         }),
-      ];
-      const { container } = render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
-      const chooseButtons = container.querySelectorAll("button");
-      const chooseFieldsBtn = Array.from(chooseButtons).find(
-        (btn) => btn.textContent === "Choose fields"
-      );
-      fireEvent.click(chooseFieldsBtn!);
+      ]);
+      fireEvent.click(screen.getByRole("button", { name: "Choose fields" }));
       expect(mockOnEditJsonFields).toHaveBeenCalledWith("test-id");
     });
 
     it("does not show Choose fields button when no field options", () => {
-      const items = [createMockItem()];
-      const { container } = render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={false}
-        />
-      );
-
-      const chooseFieldButtons = container.querySelectorAll("button");
-      const hasChooseFields = Array.from(chooseFieldButtons).some(
-        (btn) => btn.textContent === "Choose fields"
-      );
-      expect(hasChooseFields).toBe(false);
+      renderPanel([createMockItem()]);
+      expect(screen.queryByRole("button", { name: "Choose fields" })).toBeNull();
     });
   });
+}
 
+function registerProcessingStateTests(): void {
   describe("processing state", () => {
     it("disables buttons when processing", () => {
-      const items = [
+      renderPanel([
         createMockItem({
-          fieldOptions: ["field1"],
-          selectedJsonFields: [],
+          fieldOptions: [createFieldOption("field1")],
         }),
-      ];
-      const { container } = render(
-        <QueuedFilesPanel
-          items={items}
-          onClear={mockOnClear}
-          onEditJsonFields={mockOnEditJsonFields}
-          onRemove={mockOnRemove}
-          onStart={mockOnStart}
-          processing={true}
-        />
-      );
+      ], true);
 
-      const buttons = container.querySelectorAll("button");
-      buttons.forEach((button) => {
-        expect(button.hasAttribute("disabled")).toBe(true);
-      });
+      expect(screen.getByRole("button", { name: "Clear queue" }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("button", { name: "Start split" }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("button", { name: "Choose fields" }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("button", { name: "Remove" }).hasAttribute("disabled")).toBe(true);
     });
   });
-});
+}

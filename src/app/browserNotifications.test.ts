@@ -9,6 +9,9 @@ import {
 } from "./browserNotifications";
 
 const STORAGE_KEY = "notebooklm-browser-notifications-enabled";
+type WindowWithOptionalNotification = Window & typeof globalThis & {
+  Notification?: typeof Notification;
+};
 
 class MockNotification {
   static permission: NotificationPermission = "default";
@@ -37,6 +40,10 @@ function setNotificationApi(permission: NotificationPermission): void {
   });
 }
 
+function removeNotificationApi(): void {
+  delete (window as WindowWithOptionalNotification).Notification;
+}
+
 describe("browserNotifications", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -47,7 +54,7 @@ describe("browserNotifications", () => {
   it("reports unsupported notifications when the API is missing", async () => {
     const originalNotification = window.Notification;
     try {
-      delete (window as any).Notification;
+      removeNotificationApi();
 
       expect(getBrowserNotificationPermission()).toBe("unsupported");
       await expect(enableBrowserNotifications()).resolves.toBe("unsupported");
@@ -62,9 +69,9 @@ describe("browserNotifications", () => {
   });
 
   it("enables notifications after permission is granted", async () => {
-    MockNotification.requestPermission.mockImplementation(async () => {
+    MockNotification.requestPermission.mockImplementation(() => {
       MockNotification.permission = "granted";
-      return "granted";
+      return Promise.resolve("granted");
     });
 
     await expect(enableBrowserNotifications()).resolves.toBe("granted");

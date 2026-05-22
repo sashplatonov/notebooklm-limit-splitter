@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProcessingRunner } from "./useProcessingRunner";
 import type { SplitLimits, SplitResult } from "../types";
 import type { ProcessedFileBatch, ProcessingStats, QueuedImportItem } from "./types";
 
-// Mock dependencies
 vi.mock("./processFiles", () => ({
   processFilesForNotebookLm: vi.fn(),
 }));
@@ -16,8 +15,8 @@ vi.mock("./processingStats", () => ({
 import { processFilesForNotebookLm } from "./processFiles";
 import { recordProcessedFiles } from "./processingStats";
 
-const mockProcessFiles = processFilesForNotebookLm as ReturnType<typeof vi.fn>;
-const mockRecordStats = recordProcessedFiles as ReturnType<typeof vi.fn>;
+const mockProcessFiles = vi.mocked(processFilesForNotebookLm);
+const mockRecordStats = vi.mocked(recordProcessedFiles);
 
 const defaultLimits: SplitLimits = {
   maxWordsPerSource: 1000,
@@ -35,67 +34,93 @@ function createMockFile(content: string, name: string): File {
   return new File([content], name, { type: "text/plain" });
 }
 
+function createItem(queueId = "q1"): QueuedImportItem {
+  return {
+    queueId,
+    file: createMockFile("content", "test.txt"),
+    fileName: "test.txt",
+    selectedJsonFields: [],
+    fieldOptions: [],
+  };
+}
+
+function createBatch(overrides: Partial<ProcessedFileBatch> = {}): ProcessedFileBatch {
+  return {
+    results: [],
+    errors: [],
+    summary: {
+      startedAt: "2024-01-01T00:00:00.000Z",
+      finishedAt: "2024-01-01T00:00:01.000Z",
+      durationMs: 1000,
+      filesProcessed: 0,
+    },
+    canceled: false,
+    completedQueueIds: [],
+    ...overrides,
+  };
+}
+
+function setupHook(pendingImports: QueuedImportItem[] = []) {
+  const setResults = vi.fn();
+  const setLastRunSummary = vi.fn();
+  const setProcessingStats = vi.fn();
+  const removeCompletedImports = vi.fn();
+
+  const hook = renderHook(() =>
+    useProcessingRunner({
+      limits: defaultLimits,
+      pendingImports,
+      processingStats: defaultStats,
+      removeCompletedImports,
+      setLastRunSummary,
+      setProcessingStats,
+      setResults,
+    }),
+  );
+
+  return {
+    hook,
+    setResults,
+    setLastRunSummary,
+    setProcessingStats,
+    removeCompletedImports,
+  };
+}
+
+function startProcessing(hook: ReturnType<typeof setupHook>["hook"]): void {
+  act(() => {
+    hook.result.current.startProcessing();
+  });
+}
+
+function stopProcessing(hook: ReturnType<typeof setupHook>["hook"]): void {
+  act(() => {
+    hook.result.current.stopProcessing();
+  });
+}
+
 describe("useProcessingRunner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRecordStats.mockResolvedValue(defaultStats);
   });
 
+  registerStartProcessingTests();
+  registerStopProcessingTests();
+  registerProgressTests();
+});
+
+function registerStartProcessingTests(): void {
   describe("startProcessing", () => {
-    it("does not start when already processing", async () => {
-      const { result } = renderHook(() =>
-        useProcessingRunner({
-          limits: defaultLimits,
-          pendingImports: [],
-          processingStats: defaultStats,
-          removeCompletedImports: vi.fn(),
-          setLastRunSummary: vi.fn(),
-          setProcessingStats: vi.fn(),
-          setResults: vi.fn(),
-        })
-      );
-
-      // Set processing to true
-      act(() => {
-        // Access internal state through the hook's closure
-        // We need to trigger processing first
-      });
-
-      // The hook should not start if processing is true
-      expect(mockProcessFiles).not.toHaveBeenCalled();
-    });
-
-    it("does not start when queue is empty", async () => {
-      const { result } = renderHook(() =>
-        useProcessingRunner({
-          limits: defaultLimits,
-          pendingImports: [],
-          processingStats: defaultStats,
-          removeCompletedImports: vi.fn(),
-          setLastRunSummary: vi.fn(),
-          setProcessingStats: vi.fn(),
-          setResults: vi.fn(),
-        })
-      );
-
-      act(() => {
-        result.current.startProcessing();
-      });
-
+    it("does not start when queue is empty", () => {
+      const { hook } = setupHook();
+      startProcessing(hook);
       expect(mockProcessFiles).not.toHaveBeenCalled();
     });
 
     it("starts processing when conditions are met", async () => {
-      const file = createMockFile("content", "test.txt");
-      const item: QueuedImportItem = {
-        queueId: "q1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
-
-      const mockResult: SplitResult = {
+      const item = createItem();
+      const result: SplitResult = {
         originalName: "test.txt",
         normalizedName: "test.txt",
         outputFormat: "txt",
@@ -104,44 +129,20 @@ describe("useProcessingRunner", () => {
         originalSizeBytes: 7,
         chunks: [],
       };
-
-      const mockBatch: ProcessedFileBatch = {
-        results: [mockResult],
-        errors: [],
+      mockProcessFiles.mockResolvedValue(createBatch({
+        results: [result],
         summary: {
           startedAt: "2024-01-01T00:00:00.000Z",
           finishedAt: "2024-01-01T00:00:01.000Z",
           durationMs: 1000,
           filesProcessed: 1,
         },
-        canceled: false,
         completedQueueIds: ["q1"],
-      };
+      }));
 
-      mockProcessFiles.mockResolvedValue(mockBatch);
+      const { hook, setResults, setLastRunSummary } = setupHook([item]);
+      startProcessing(hook);
 
-      const setResults = vi.fn();
-      const setLastRunSummary = vi.fn();
-      const setProcessingStats = vi.fn();
-      const removeCompletedImports = vi.fn();
-
-      const { result } = renderHook(() =>
-        useProcessingRunner({
-          limits: defaultLimits,
-          pendingImports: [item],
-          processingStats: defaultStats,
-          removeCompletedImports,
-          setLastRunSummary,
-          setProcessingStats,
-          setResults,
-        })
-      );
-
-      act(() => {
-        result.current.startProcessing();
-      });
-
-      // Wait for async processing
       await vi.waitFor(() => {
         expect(mockProcessFiles).toHaveBeenCalled();
       });
@@ -151,212 +152,81 @@ describe("useProcessingRunner", () => {
     });
 
     it("sets error message when processing has errors", async () => {
-      const file = createMockFile("content", "test.txt");
-      const item: QueuedImportItem = {
-        queueId: "q1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
-
-      const mockBatch: ProcessedFileBatch = {
-        results: [],
+      mockProcessFiles.mockResolvedValue(createBatch({
         errors: ["test.txt: Error message"],
-        summary: {
-          startedAt: "2024-01-01T00:00:00.000Z",
-          finishedAt: "2024-01-01T00:00:01.000Z",
-          durationMs: 1000,
-          filesProcessed: 0,
-        },
-        canceled: false,
-        completedQueueIds: [],
-      };
+      }));
 
-      mockProcessFiles.mockResolvedValue(mockBatch);
-
-      const { result } = renderHook(() =>
-        useProcessingRunner({
-          limits: defaultLimits,
-          pendingImports: [item],
-          processingStats: defaultStats,
-          removeCompletedImports: vi.fn(),
-          setLastRunSummary: vi.fn(),
-          setProcessingStats: vi.fn(),
-          setResults: vi.fn(),
-        })
-      );
-
-      act(() => {
-        result.current.startProcessing();
-      });
+      const { hook } = setupHook([createItem()]);
+      startProcessing(hook);
 
       await vi.waitFor(() => {
-        expect(result.current.errorMessage).toContain("Error message");
+        expect(hook.result.current.errorMessage).toContain("Error message");
       });
     });
 
     it("sets canceled message when processing is canceled", async () => {
-      const file = createMockFile("content", "test.txt");
-      const item: QueuedImportItem = {
-        queueId: "q1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
-
-      const mockBatch: ProcessedFileBatch = {
-        results: [],
-        errors: [],
-        summary: {
-          startedAt: "2024-01-01T00:00:00.000Z",
-          finishedAt: "2024-01-01T00:00:01.000Z",
-          durationMs: 1000,
-          filesProcessed: 0,
-        },
+      mockProcessFiles.mockResolvedValue(createBatch({
         canceled: true,
-        completedQueueIds: [],
-      };
+      }));
 
-      mockProcessFiles.mockResolvedValue(mockBatch);
-
-      const { result } = renderHook(() =>
-        useProcessingRunner({
-          limits: defaultLimits,
-          pendingImports: [item],
-          processingStats: defaultStats,
-          removeCompletedImports: vi.fn(),
-          setLastRunSummary: vi.fn(),
-          setProcessingStats: vi.fn(),
-          setResults: vi.fn(),
-        })
-      );
-
-      act(() => {
-        result.current.startProcessing();
-      });
+      const { hook } = setupHook([createItem()]);
+      startProcessing(hook);
 
       await vi.waitFor(() => {
-        expect(result.current.errorMessage).toContain("stopped");
+        expect(hook.result.current.errorMessage).toContain("stopped");
       });
     });
   });
+}
 
+function registerStopProcessingTests(): void {
   describe("stopProcessing", () => {
     it("aborts the processing", async () => {
-      const file = createMockFile("content", "test.txt");
-      const item: QueuedImportItem = {
-        queueId: "q1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
-
-      // Create a promise that won't resolve immediately
-      let resolveProcessing: (value: ProcessedFileBatch) => void;
-      const processingPromise = new Promise<ProcessedFileBatch>((resolve) => {
-        resolveProcessing = resolve;
-      });
-
-      mockProcessFiles.mockReturnValue(processingPromise);
-
-      const { result } = renderHook(() =>
-        useProcessingRunner({
-          limits: defaultLimits,
-          pendingImports: [item],
-          processingStats: defaultStats,
-          removeCompletedImports: vi.fn(),
-          setLastRunSummary: vi.fn(),
-          setProcessingStats: vi.fn(),
-          setResults: vi.fn(),
-        })
+      let resolveProcessing!: (value: ProcessedFileBatch) => void;
+      mockProcessFiles.mockReturnValue(
+        new Promise<ProcessedFileBatch>((resolve) => {
+          resolveProcessing = resolve;
+        }),
       );
 
-      act(() => {
-        result.current.startProcessing();
-      });
+      const { hook } = setupHook([createItem()]);
+      startProcessing(hook);
 
-      // Wait for processing to start
       await vi.waitFor(() => {
         expect(mockProcessFiles).toHaveBeenCalled();
       });
 
-      // Stop processing
-      act(() => {
-        result.current.stopProcessing();
-      });
+      stopProcessing(hook);
+      resolveProcessing(createBatch());
 
-      // Resolve the processing
-      resolveProcessing!({
-        results: [],
-        errors: [],
-        summary: {
-          startedAt: "2024-01-01T00:00:00.000Z",
-          finishedAt: "2024-01-01T00:00:01.000Z",
-          durationMs: 1000,
-          filesProcessed: 0,
-        },
-        canceled: false,
-        completedQueueIds: [],
-      });
-
-      // Wait for processing to complete
       await vi.waitFor(() => {
-        expect(result.current.processing).toBe(false);
+        expect(hook.result.current.processing).toBe(false);
       });
     });
   });
+}
 
+function registerProgressTests(): void {
   describe("progress updates", () => {
-    it("updates progress during processing", async () => {
-      const file = createMockFile("content", "test.txt");
-      const item: QueuedImportItem = {
-        queueId: "q1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
-
-      const mockBatch: ProcessedFileBatch = {
-        results: [],
-        errors: [],
+    it("resets progress after processing completes", async () => {
+      mockProcessFiles.mockResolvedValue(createBatch({
         summary: {
           startedAt: "2024-01-01T00:00:00.000Z",
           finishedAt: "2024-01-01T00:00:01.000Z",
           durationMs: 1000,
           filesProcessed: 1,
         },
-        canceled: false,
         completedQueueIds: ["q1"],
-      };
+      }));
 
-      mockProcessFiles.mockResolvedValue(mockBatch);
-
-      const { result } = renderHook(() =>
-        useProcessingRunner({
-          limits: defaultLimits,
-          pendingImports: [item],
-          processingStats: defaultStats,
-          removeCompletedImports: vi.fn(),
-          setLastRunSummary: vi.fn(),
-          setProcessingStats: vi.fn(),
-          setResults: vi.fn(),
-        })
-      );
-
-      act(() => {
-        result.current.startProcessing();
-      });
+      const { hook } = setupHook([createItem()]);
+      startProcessing(hook);
 
       await vi.waitFor(() => {
         expect(mockProcessFiles).toHaveBeenCalled();
       });
 
-      // Progress should be reset after completion
-      expect(result.current.progress).toEqual({
+      expect(hook.result.current.progress).toEqual({
         totalFiles: 0,
         completedFiles: 0,
         currentFileName: null,
@@ -365,4 +235,4 @@ describe("useProcessingRunner", () => {
       });
     });
   });
-});
+}

@@ -26,6 +26,14 @@ interface FieldProps {
   defaultValue: number;
 }
 
+interface NotificationSettingsProps {
+  notificationPermission: BrowserNotificationPermission;
+  notificationsEnabled: boolean;
+  notificationRequestPending: boolean;
+  onDisableNotifications: () => void;
+  onEnableNotifications: () => void;
+}
+
 function SettingField({
   label,
   description,
@@ -114,6 +122,96 @@ function getNotificationStatusLabel(
   return "Needs permission";
 }
 
+function NotificationSettings(props: NotificationSettingsProps) {
+  const {
+    notificationPermission,
+    notificationsEnabled,
+    notificationRequestPending,
+    onDisableNotifications,
+    onEnableNotifications,
+  } = props;
+  const notificationStatusLabel = getNotificationStatusLabel(notificationPermission, notificationsEnabled);
+  const notificationsUnavailable = notificationPermission === "unsupported";
+  const notificationsBlocked = notificationPermission === "denied";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-700">Browser notifications</div>
+          <div className="text-xs text-slate-400">
+            Alerts when a split queue finishes, including Chrome, Firefox, and Safari where site notifications are allowed.
+          </div>
+        </div>
+        <span className="rounded-full border-2 border-slate-950 bg-[#ecfeff] px-2 py-1 text-xs text-slate-700">
+          {notificationStatusLabel}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        {!notificationsEnabled && !notificationsUnavailable && (
+          <button
+            type="button"
+            disabled={notificationRequestPending}
+            onClick={onEnableNotifications}
+            className="rounded-full border-2 border-slate-950 bg-[var(--color-brand)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-slate-950 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {notificationRequestPending ? "Requesting access" : "Enable notifications"}
+          </button>
+        )}
+        {notificationsEnabled && (
+          <button
+            type="button"
+            onClick={onDisableNotifications}
+            className="rounded-full border-2 border-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 transition-colors hover:bg-slate-100"
+          >
+            Disable notifications
+          </button>
+        )}
+        {notificationsBlocked && (
+          <p className="text-xs text-amber-700">
+            Browser permission is blocked. Re-enable site notifications in browser settings, then click enable again.
+          </p>
+        )}
+        {notificationsUnavailable && (
+          <p className="text-xs text-slate-500">
+            This environment does not expose the Notification API.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SettingsHeader({ limits, open, onToggle }: Pick<Props, "limits" | "open" | "onToggle">) {
+  return (
+    <button
+      onClick={onToggle}
+      className="flex w-full items-center justify-between px-6 py-4 transition-colors hover:bg-[#fff8ef]"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-[1rem] border-2 border-slate-950 bg-[#fff5e6]">
+          <svg className="h-4 w-4 text-slate-950" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </div>
+        <span className="font-display text-lg font-black uppercase tracking-[0.08em] text-slate-950">Limit settings</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="rounded-full border-2 border-slate-950 bg-[#ecfeff] px-2 py-1 text-xs text-slate-700">
+          {formatNumber(limits.maxWordsPerSource)} words / source
+        </span>
+        <svg
+          className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+    </button>
+  );
+}
+
 export default function SettingsPanel({
   limits,
   notificationPermission,
@@ -126,37 +224,10 @@ export default function SettingsPanel({
   onToggle,
 }: Props) {
   const resetAll = () => onChange({ ...DEFAULT_LIMITS });
-  const notificationStatusLabel = getNotificationStatusLabel(notificationPermission, notificationsEnabled);
-  const notificationsUnavailable = notificationPermission === "unsupported";
-  const notificationsBlocked = notificationPermission === "denied";
 
   return (
     <div className="overflow-hidden rounded-[2rem] border-4 border-slate-950 bg-[color:var(--color-surface)]">
-      <button
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-6 py-4 transition-colors hover:bg-[#fff8ef]"
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[1rem] border-2 border-slate-950 bg-[#fff5e6]">
-            <svg className="h-4 w-4 text-slate-950" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <span className="font-display text-lg font-black uppercase tracking-[0.08em] text-slate-950">Limit settings</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="rounded-full border-2 border-slate-950 bg-[#ecfeff] px-2 py-1 text-xs text-slate-700">
-            {formatNumber(limits.maxWordsPerSource)} words / source
-          </span>
-          <svg
-            className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-      </button>
+      <SettingsHeader limits={limits} open={open} onToggle={onToggle} />
 
       {/* Body */}
       {open && (
@@ -198,50 +269,13 @@ export default function SettingsPanel({
               defaultValue={DEFAULT_LIMITS.maxSourcesPerNotebook}
             />
             <div className="border-t border-slate-950/10" />
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-slate-700">Browser notifications</div>
-                  <div className="text-xs text-slate-400">
-                    Alerts when a split queue finishes, including Chrome, Firefox, and Safari where site notifications are allowed.
-                  </div>
-                </div>
-                <span className="rounded-full border-2 border-slate-950 bg-[#ecfeff] px-2 py-1 text-xs text-slate-700">
-                  {notificationStatusLabel}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                {!notificationsEnabled && !notificationsUnavailable && (
-                  <button
-                    type="button"
-                    disabled={notificationRequestPending}
-                    onClick={onEnableNotifications}
-                    className="rounded-full border-2 border-slate-950 bg-[var(--color-brand)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-slate-950 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    {notificationRequestPending ? "Requesting access" : "Enable notifications"}
-                  </button>
-                )}
-                {notificationsEnabled && (
-                  <button
-                    type="button"
-                    onClick={onDisableNotifications}
-                    className="rounded-full border-2 border-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 transition-colors hover:bg-slate-100"
-                  >
-                    Disable notifications
-                  </button>
-                )}
-                {notificationsBlocked && (
-                  <p className="text-xs text-amber-700">
-                    Browser permission is blocked. Re-enable site notifications in browser settings, then click enable again.
-                  </p>
-                )}
-                {notificationsUnavailable && (
-                  <p className="text-xs text-slate-500">
-                    This environment does not expose the Notification API.
-                  </p>
-                )}
-              </div>
-            </div>
+            <NotificationSettings
+              notificationPermission={notificationPermission}
+              notificationsEnabled={notificationsEnabled}
+              notificationRequestPending={notificationRequestPending}
+              onDisableNotifications={onDisableNotifications}
+              onEnableNotifications={onEnableNotifications}
+            />
           </div>
 
           <div className="flex items-center justify-between pt-1">

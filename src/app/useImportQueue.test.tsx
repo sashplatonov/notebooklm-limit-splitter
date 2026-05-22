@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useImportQueue } from "./useImportQueue";
 
-// Mock dependencies
 vi.mock("../utils/filePipeline", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../utils/filePipeline")>();
   return {
@@ -14,10 +13,60 @@ vi.mock("../utils/filePipeline", async (importOriginal) => {
 
 import { inspectJsonFile } from "../utils/filePipeline";
 
-const mockInspectJsonFile = inspectJsonFile as ReturnType<typeof vi.fn>;
+const mockInspectJsonFile = vi.mocked(inspectJsonFile);
 
 function createMockFile(content: string, name: string, options?: { lastModified?: number }): File {
   return new File([content], name, { type: "text/plain", ...options });
+}
+
+function setupHook() {
+  return renderHook(() => useImportQueue());
+}
+
+async function addFiles(
+  hook: ReturnType<typeof setupHook>,
+  files: File[],
+  maxFileSizeMB?: number,
+): Promise<void> {
+  await act(async () => {
+    await hook.result.current.addFiles(files, maxFileSizeMB);
+  });
+}
+
+function openEditor(hook: ReturnType<typeof setupHook>, queueId: string): void {
+  act(() => {
+    hook.result.current.openJsonFieldEditor(queueId);
+  });
+}
+
+function removePending(hook: ReturnType<typeof setupHook>, queueId: string): void {
+  act(() => {
+    hook.result.current.removePendingImport(queueId);
+  });
+}
+
+function clearPending(hook: ReturnType<typeof setupHook>): void {
+  act(() => {
+    hook.result.current.clearPendingImports();
+  });
+}
+
+function updateSelection(hook: ReturnType<typeof setupHook>, queueId: string, selectedPaths: string[]): void {
+  act(() => {
+    hook.result.current.updateJsonFieldSelection(queueId, selectedPaths);
+  });
+}
+
+function removeCompleted(hook: ReturnType<typeof setupHook>, completedQueueIds: string[]): void {
+  act(() => {
+    hook.result.current.removeCompletedImports(completedQueueIds);
+  });
+}
+
+function closeEditor(hook: ReturnType<typeof setupHook>): void {
+  act(() => {
+    hook.result.current.closeJsonFieldEditor();
+  });
 }
 
 describe("useImportQueue", () => {
@@ -25,379 +74,218 @@ describe("useImportQueue", () => {
     vi.clearAllMocks();
   });
 
+  registerAddFilesTests();
+  registerRemovePendingTests();
+  registerClearTests();
+  registerOpenEditorTests();
+  registerCloseEditorTests();
+  registerUpdateSelectionTests();
+  registerRemoveCompletedTests();
+});
+
+function registerAddFilesTests(): void {
   describe("addFiles", () => {
     it("adds text files to the queue", async () => {
-      const file = createMockFile("content", "test.txt");
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile("content", "test.txt")]);
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(1);
-      expect(result.current.pendingImports[0].fileName).toBe("test.txt");
-      expect(result.current.pendingImports[0].selectedJsonFields).toEqual([]);
+      expect(hook.result.current.pendingImports).toHaveLength(1);
+      expect(hook.result.current.pendingImports[0].fileName).toBe("test.txt");
+      expect(hook.result.current.pendingImports[0].selectedJsonFields).toEqual([]);
     });
 
     it("adds JSON files with field options", async () => {
-      const json = JSON.stringify({ name: "test", count: 42 });
-      const file = createMockFile(json, "test.json");
-
       mockInspectJsonFile.mockResolvedValue({
         fieldOptions: [
-          { path: "name", type: "string" },
-          { path: "count", type: "number" },
+          { path: "name", sampleValue: "test" },
+          { path: "count", sampleValue: "42" },
         ],
       });
 
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile(JSON.stringify({ name: "test", count: 42 }), "test.json")]);
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(1);
-      expect(result.current.pendingImports[0].selectedJsonFields).toEqual(["name", "count"]);
+      expect(hook.result.current.pendingImports).toHaveLength(1);
+      expect(hook.result.current.pendingImports[0].selectedJsonFields).toEqual(["name", "count"]);
     });
 
     it("handles JSON inspection errors gracefully", async () => {
-      const file = createMockFile("{}", "test.json");
       mockInspectJsonFile.mockRejectedValue(new Error("Parse error"));
 
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile("{}", "test.json")]);
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(1);
-      expect(result.current.pendingImports[0].selectedJsonFields).toEqual([]);
+      expect(hook.result.current.pendingImports).toHaveLength(1);
+      expect(hook.result.current.pendingImports[0].selectedJsonFields).toEqual([]);
     });
 
     it("adds multiple files to the queue", async () => {
-      const file1 = createMockFile("content1", "file1.txt");
-      const file2 = createMockFile("content2", "file2.txt");
+      const hook = setupHook();
+      await addFiles(hook, [
+        createMockFile("content1", "file1.txt"),
+        createMockFile("content2", "file2.txt"),
+      ]);
 
-      const { result } = renderHook(() => useImportQueue());
-
-      await act(async () => {
-        await result.current.addFiles([file1, file2]);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(2);
+      expect(hook.result.current.pendingImports).toHaveLength(2);
     });
 
-    it("records validation issues for unsupported files before reading them", async () => {
-      const file = new File([], "test.pdf", { type: "application/pdf" });
-      const { result } = renderHook(() => useImportQueue());
+    it("records validation issues for unsupported and oversized files before reading them", async () => {
+      const hook = setupHook();
+      await addFiles(hook, [new File([], "test.pdf", { type: "application/pdf" })]);
+      await addFiles(hook, [createMockFile("content", "test.txt")], 0.000001);
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(0);
-      expect(result.current.validationIssues).toHaveLength(1);
-      expect(result.current.validationIssues[0].fileName).toBe("test.pdf");
+      expect(hook.result.current.pendingImports).toHaveLength(0);
+      expect(hook.result.current.validationIssues).toHaveLength(2);
+      expect(hook.result.current.validationIssues.map((issue) => issue.fileName)).toEqual(["test.pdf", "test.txt"]);
       expect(mockInspectJsonFile).not.toHaveBeenCalled();
     });
-
-    it("records validation issues for oversized files before reading them", async () => {
-      const file = createMockFile("content", "test.txt");
-      const { result } = renderHook(() => useImportQueue());
-
-      await act(async () => {
-        await result.current.addFiles([file], 0.000001);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(0);
-      expect(result.current.validationIssues).toHaveLength(1);
-      expect(result.current.validationIssues[0].fileName).toBe("test.txt");
-    });
   });
+}
 
+function registerRemovePendingTests(): void {
   describe("removePendingImport", () => {
     it("removes an item from the queue", async () => {
-      const file = createMockFile("content", "test.txt");
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile("content", "test.txt")]);
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.removePendingImport(queueId);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(0);
+      removePending(hook, hook.result.current.pendingImports[0].queueId);
+      expect(hook.result.current.pendingImports).toHaveLength(0);
     });
 
     it("closes JSON field editor when removing that file", async () => {
-      const json = JSON.stringify({ name: "test" });
-      const file = createMockFile(json, "test.json");
-
       mockInspectJsonFile.mockResolvedValue({
-        fieldOptions: [{ path: "name", type: "string" }],
+        fieldOptions: [{ path: "name", sampleValue: "test" }],
       });
 
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile(JSON.stringify({ name: "test" }), "test.json")]);
+      const queueId = hook.result.current.pendingImports[0].queueId;
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
+      openEditor(hook, queueId);
+      expect(hook.result.current.activeJsonFieldConfig).not.toBeNull();
 
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.openJsonFieldEditor(queueId);
-      });
-
-      expect(result.current.activeJsonFieldConfig).not.toBeNull();
-
-      act(() => {
-        result.current.removePendingImport(queueId);
-      });
-
-      expect(result.current.activeJsonFieldConfig).toBeNull();
+      removePending(hook, queueId);
+      expect(hook.result.current.activeJsonFieldConfig).toBeNull();
     });
   });
+}
 
+function registerClearTests(): void {
   describe("clearPendingImports", () => {
     it("clears all items and closes editor", async () => {
-      const file = createMockFile("content", "test.txt");
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile("content", "test.txt")]);
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      act(() => {
-        result.current.clearPendingImports();
-      });
-
-      expect(result.current.pendingImports).toHaveLength(0);
-      expect(result.current.activeJsonFieldConfig).toBeNull();
+      clearPending(hook);
+      expect(hook.result.current.pendingImports).toHaveLength(0);
+      expect(hook.result.current.activeJsonFieldConfig).toBeNull();
     });
   });
+}
 
+function registerOpenEditorTests(): void {
   describe("openJsonFieldEditor", () => {
     it("opens editor for JSON file with fields", async () => {
-      const json = JSON.stringify({ name: "test" });
-      const file = createMockFile(json, "test.json");
-
       mockInspectJsonFile.mockResolvedValue({
-        fieldOptions: [{ path: "name", type: "string" }],
+        fieldOptions: [{ path: "name", sampleValue: "test" }],
       });
 
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile(JSON.stringify({ name: "test" }), "test.json")]);
+      const queueId = hook.result.current.pendingImports[0].queueId;
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.openJsonFieldEditor(queueId);
-      });
-
-      expect(result.current.activeJsonFieldConfig).not.toBeNull();
-      expect(result.current.activeJsonFieldConfig?.fileKey).toBe(queueId);
+      openEditor(hook, queueId);
+      expect(hook.result.current.activeJsonFieldConfig?.fileKey).toBe(queueId);
     });
 
-    it("does nothing for non-JSON files", async () => {
-      const file = createMockFile("content", "test.txt");
-      const { result } = renderHook(() => useImportQueue());
+    it("does nothing for non-JSON files and JSON files without field options", async () => {
+      mockInspectJsonFile.mockResolvedValue({ fieldOptions: [] });
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
+      const textHook = setupHook();
+      await addFiles(textHook, [createMockFile("content", "test.txt")]);
+      openEditor(textHook, textHook.result.current.pendingImports[0].queueId);
+      expect(textHook.result.current.activeJsonFieldConfig).toBeNull();
 
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.openJsonFieldEditor(queueId);
-      });
-
-      expect(result.current.activeJsonFieldConfig).toBeNull();
-    });
-
-    it("does nothing for JSON files without field options", async () => {
-      const json = JSON.stringify("simple string");
-      const file = createMockFile(json, "test.json");
-
-      mockInspectJsonFile.mockResolvedValue({
-        fieldOptions: [],
-      });
-
-      const { result } = renderHook(() => useImportQueue());
-
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.openJsonFieldEditor(queueId);
-      });
-
-      expect(result.current.activeJsonFieldConfig).toBeNull();
+      const jsonHook = setupHook();
+      await addFiles(jsonHook, [createMockFile(JSON.stringify("simple string"), "test.json")]);
+      openEditor(jsonHook, jsonHook.result.current.pendingImports[0].queueId);
+      expect(jsonHook.result.current.activeJsonFieldConfig).toBeNull();
     });
   });
+}
 
+function registerCloseEditorTests(): void {
   describe("closeJsonFieldEditor", () => {
     it("closes the editor", async () => {
-      const json = JSON.stringify({ name: "test" });
-      const file = createMockFile(json, "test.json");
-
       mockInspectJsonFile.mockResolvedValue({
-        fieldOptions: [{ path: "name", type: "string" }],
+        fieldOptions: [{ path: "name", sampleValue: "test" }],
       });
 
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile(JSON.stringify({ name: "test" }), "test.json")]);
+      openEditor(hook, hook.result.current.pendingImports[0].queueId);
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.openJsonFieldEditor(queueId);
-      });
-
-      expect(result.current.activeJsonFieldConfig).not.toBeNull();
-
-      act(() => {
-        result.current.closeJsonFieldEditor();
-      });
-
-      expect(result.current.activeJsonFieldConfig).toBeNull();
+      closeEditor(hook);
+      expect(hook.result.current.activeJsonFieldConfig).toBeNull();
     });
   });
+}
 
+function registerUpdateSelectionTests(): void {
   describe("updateJsonFieldSelection", () => {
-    it("updates selected fields for an item", async () => {
-      const json = JSON.stringify({ name: "test", count: 42, extra: "remove" });
-      const file = createMockFile(json, "test.json");
-
+    it("updates selected fields for an item and active config", async () => {
       mockInspectJsonFile.mockResolvedValue({
         fieldOptions: [
-          { path: "name", type: "string" },
-          { path: "count", type: "number" },
-          { path: "extra", type: "string" },
+          { path: "name", sampleValue: "test" },
+          { path: "count", sampleValue: "42" },
+          { path: "extra", sampleValue: "remove" },
         ],
       });
 
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile(JSON.stringify({ name: "test", count: 42, extra: "remove" }), "test.json")]);
+      const queueId = hook.result.current.pendingImports[0].queueId;
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
+      openEditor(hook, queueId);
+      updateSelection(hook, queueId, ["name", "count"]);
 
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.updateJsonFieldSelection(queueId, ["name"]);
-      });
-
-      expect(result.current.pendingImports[0].selectedJsonFields).toEqual(["name"]);
-    });
-
-    it("updates active config if open", async () => {
-      const json = JSON.stringify({ name: "test" });
-      const file = createMockFile(json, "test.json");
-
-      mockInspectJsonFile.mockResolvedValue({
-        fieldOptions: [{ path: "name", type: "string" }],
-      });
-
-      const { result } = renderHook(() => useImportQueue());
-
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.openJsonFieldEditor(queueId);
-      });
-
-      act(() => {
-        result.current.updateJsonFieldSelection(queueId, ["name", "count"]);
-      });
-
-      expect(result.current.activeJsonFieldConfig?.selectedPaths).toEqual(["name", "count"]);
+      expect(hook.result.current.pendingImports[0].selectedJsonFields).toEqual(["name", "count"]);
+      expect(hook.result.current.activeJsonFieldConfig?.selectedPaths).toEqual(["name", "count"]);
     });
   });
+}
 
+function registerRemoveCompletedTests(): void {
   describe("removeCompletedImports", () => {
     it("removes completed items from queue", async () => {
-      const file1 = createMockFile("content1", "file1.txt");
-      const file2 = createMockFile("content2", "file2.txt");
+      const hook = setupHook();
+      await addFiles(hook, [
+        createMockFile("content1", "file1.txt"),
+        createMockFile("content2", "file2.txt"),
+      ]);
 
-      const { result } = renderHook(() => useImportQueue());
+      const [first, second] = hook.result.current.pendingImports.map((item) => item.queueId);
+      removeCompleted(hook, [first]);
 
-      await act(async () => {
-        await result.current.addFiles([file1, file2]);
-      });
-
-      const queueId1 = result.current.pendingImports[0].queueId;
-      const queueId2 = result.current.pendingImports[1].queueId;
-
-      act(() => {
-        result.current.removeCompletedImports([queueId1]);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(1);
-      expect(result.current.pendingImports[0].queueId).toBe(queueId2);
+      expect(hook.result.current.pendingImports).toHaveLength(1);
+      expect(hook.result.current.pendingImports[0].queueId).toBe(second);
     });
 
-    it("does nothing for empty array", async () => {
-      const file = createMockFile("content", "test.txt");
-      const { result } = renderHook(() => useImportQueue());
-
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
-
-      act(() => {
-        result.current.removeCompletedImports([]);
-      });
-
-      expect(result.current.pendingImports).toHaveLength(1);
-    });
-
-    it("closes editor if that file was completed", async () => {
-      const json = JSON.stringify({ name: "test" });
-      const file = createMockFile(json, "test.json");
-
+    it("does nothing for empty array and closes editor if that file was completed", async () => {
       mockInspectJsonFile.mockResolvedValue({
-        fieldOptions: [{ path: "name", type: "string" }],
+        fieldOptions: [{ path: "name", sampleValue: "test" }],
       });
 
-      const { result } = renderHook(() => useImportQueue());
+      const hook = setupHook();
+      await addFiles(hook, [createMockFile(JSON.stringify({ name: "test" }), "test.json")]);
+      const queueId = hook.result.current.pendingImports[0].queueId;
 
-      await act(async () => {
-        await result.current.addFiles([file]);
-      });
+      removeCompleted(hook, []);
+      expect(hook.result.current.pendingImports).toHaveLength(1);
 
-      const queueId = result.current.pendingImports[0].queueId;
-
-      act(() => {
-        result.current.openJsonFieldEditor(queueId);
-      });
-
-      expect(result.current.activeJsonFieldConfig).not.toBeNull();
-
-      act(() => {
-        result.current.removeCompletedImports([queueId]);
-      });
-
-      expect(result.current.activeJsonFieldConfig).toBeNull();
+      openEditor(hook, queueId);
+      removeCompleted(hook, [queueId]);
+      expect(hook.result.current.activeJsonFieldConfig).toBeNull();
     });
   });
-});
+}

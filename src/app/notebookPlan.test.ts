@@ -20,57 +20,15 @@ function createResult(
 }
 
 describe("buildNotebookPlan", () => {
-  it("sorts metadata-backed chunks before filename-only and undated chunks", () => {
-    const results: SplitResult[] = [
-      createResult("zeta.txt", "zeta.txt", [
-        {
-          index: 0,
-          content: "zeta first",
-          wordCount: 3,
-          sizeBytes: 30,
-          fileName: "zeta_chunk.txt",
-          startDate: "2024-05-03",
-          endDate: "2024-05-03",
-        },
-        {
-          index: 1,
-          content: "zeta second",
-          wordCount: 3,
-          sizeBytes: 31,
-          fileName: "zeta_2024-05-05.txt",
-        },
-      ], {
-        originalSizeBytes: 3_000,
-        originalWordCount: 300,
-      }),
-      createResult("alpha.txt", "alpha.txt", [
-        {
-          index: 0,
-          content: "alpha",
-          wordCount: 2,
-          sizeBytes: 20,
-          fileName: "alpha_legacy.txt",
-          startDate: "2024-05-01",
-          endDate: "2024-05-02",
-        },
-      ], {
-        originalSizeBytes: 2_000,
-        originalWordCount: 200,
-      }),
-      createResult("plain.txt", "plain.txt", [
-        {
-          index: 0,
-          content: "plain",
-          wordCount: 1,
-          sizeBytes: 10,
-          fileName: "plain.txt",
-        },
-      ], {
-        originalSizeBytes: 1_500,
-        originalWordCount: 150,
-      }),
-    ];
+  registerSortingTests();
+  registerFallbackTests();
+  registerEmptyStateTests();
+  registerNotebookNumberingTests();
+});
 
+function registerSortingTests(): void {
+  it("sorts metadata-backed chunks before filename-only and undated chunks", () => {
+    const results = createSortingResults();
     const plan = buildNotebookPlan(results, 2);
 
     expect(plan.totalChunks).toBe(4);
@@ -109,7 +67,9 @@ describe("buildNotebookPlan", () => {
       endDate: null,
     });
   });
+}
 
+function registerFallbackTests(): void {
   it("falls back to filename parsing for legacy chunks without metadata", () => {
     const results = [
       createResult("legacy.txt", "legacy.txt", [
@@ -138,7 +98,9 @@ describe("buildNotebookPlan", () => {
       endDate: "2024-06-03",
     });
   });
+}
 
+function registerEmptyStateTests(): void {
   it("returns empty planning output when there are no chunks", () => {
     const plan = buildNotebookPlan([], 10);
 
@@ -151,44 +113,11 @@ describe("buildNotebookPlan", () => {
     expect(plan.sortedChunks).toEqual([]);
     expect(plan.chunkPlacements).toEqual([]);
   });
+}
 
+function registerNotebookNumberingTests(): void {
   it("resets notebook numbering for each separate split result", () => {
-    const results: SplitResult[] = [
-      createResult("alpha.txt", "alpha.txt", [
-        {
-          index: 0,
-          content: "alpha one",
-          wordCount: 2,
-          sizeBytes: 20,
-          fileName: "alpha_2024-05-01.txt",
-        },
-        {
-          index: 1,
-          content: "alpha two",
-          wordCount: 2,
-          sizeBytes: 20,
-          fileName: "alpha_2024-05-02.txt",
-        },
-      ]),
-      createResult("beta.txt", "beta.txt", [
-        {
-          index: 0,
-          content: "beta one",
-          wordCount: 2,
-          sizeBytes: 20,
-          fileName: "beta_2024-05-03.txt",
-        },
-        {
-          index: 1,
-          content: "beta two",
-          wordCount: 2,
-          sizeBytes: 20,
-          fileName: "beta_2024-05-04.txt",
-        },
-      ]),
-    ];
-
-    const plan = buildNotebookPlan(results, 3);
+    const plan = buildNotebookPlan(createNotebookNumberingResults(), 3);
 
     expect(plan.totalChunks).toBe(4);
     expect(plan.totalNotebooks).toBe(2);
@@ -196,4 +125,93 @@ describe("buildNotebookPlan", () => {
     expect(plan.chunkPlacements[0].map((placement) => placement.notebookNumber)).toEqual([1, 1]);
     expect(plan.chunkPlacements[1].map((placement) => placement.notebookNumber)).toEqual([1, 1]);
   });
-});
+}
+
+function createSortingResults(): SplitResult[] {
+  return [
+    createResult("zeta.txt", "zeta.txt", [
+      {
+        index: 0,
+        content: "zeta first",
+        wordCount: 3,
+        sizeBytes: 30,
+        fileName: "zeta_chunk.txt",
+        startDate: "2024-05-03",
+        endDate: "2024-05-03",
+      },
+      {
+        index: 1,
+        content: "zeta second",
+        wordCount: 3,
+        sizeBytes: 31,
+        fileName: "zeta_2024-05-05.txt",
+      },
+    ], {
+      originalSizeBytes: 3_000,
+      originalWordCount: 300,
+    }),
+    createResult("alpha.txt", "alpha.txt", [
+      {
+        index: 0,
+        content: "alpha",
+        wordCount: 2,
+        sizeBytes: 20,
+        fileName: "alpha_legacy.txt",
+        startDate: "2024-05-01",
+        endDate: "2024-05-02",
+      },
+    ], {
+      originalSizeBytes: 2_000,
+      originalWordCount: 200,
+    }),
+    createResult("plain.txt", "plain.txt", [
+      {
+        index: 0,
+        content: "plain",
+        wordCount: 1,
+        sizeBytes: 10,
+        fileName: "plain.txt",
+      },
+    ], {
+      originalSizeBytes: 1_500,
+      originalWordCount: 150,
+    }),
+  ];
+}
+
+function createNotebookNumberingResults(): SplitResult[] {
+  return [
+    createResult("alpha.txt", "alpha.txt", [
+      {
+        index: 0,
+        content: "alpha one",
+        wordCount: 2,
+        sizeBytes: 20,
+        fileName: "alpha_2024-05-01.txt",
+      },
+      {
+        index: 1,
+        content: "alpha two",
+        wordCount: 2,
+        sizeBytes: 20,
+        fileName: "alpha_2024-05-02.txt",
+      },
+    ]),
+    createResult("beta.txt", "beta.txt", [
+      {
+        index: 0,
+        content: "beta one",
+        wordCount: 2,
+        sizeBytes: 20,
+        fileName: "beta_2024-05-03.txt",
+      },
+      {
+        index: 1,
+        content: "beta two",
+        wordCount: 2,
+        sizeBytes: 20,
+        fileName: "beta_2024-05-04.txt",
+      },
+    ]),
+  ];
+}

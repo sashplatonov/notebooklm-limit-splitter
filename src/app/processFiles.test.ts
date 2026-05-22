@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { processFilesForNotebookLm } from "./processFiles";
-import type { QueuedImportItem, SplitLimits } from "./types";
+import type { ProcessingProgress, QueuedImportItem, SplitLimits } from "./types";
 import { ProcessingAbortedError } from "../utils/splitter/shared";
 
-// Mock dependencies
 vi.mock("../utils/filePipeline", () => ({
   prepareFileForNotebookLm: vi.fn(),
 }));
@@ -17,7 +16,7 @@ vi.mock("../utils/splitter/text", () => ({
 }));
 
 vi.mock("./formatting", () => ({
-  createSummary: vi.fn((startedAt, filesProcessed) => ({
+  createSummary: vi.fn((startedAt: string, filesProcessed: number) => ({
     startedAt,
     finishedAt: new Date().toISOString(),
     durationMs: 100,
@@ -29,12 +28,18 @@ import { prepareFileForNotebookLm } from "../utils/filePipeline";
 import { splitFile } from "../utils/splitter";
 import { splitTextSegments } from "../utils/splitter/text";
 
-const mockPrepareFile = prepareFileForNotebookLm as ReturnType<typeof vi.fn>;
-const mockSplitFile = splitFile as ReturnType<typeof vi.fn>;
-const mockSplitTextSegments = splitTextSegments as ReturnType<typeof vi.fn>;
+const mockPrepareFile = vi.mocked(prepareFileForNotebookLm);
+const mockSplitFile = vi.mocked(splitFile);
+const mockSplitTextSegments = vi.mocked(splitTextSegments);
+type ProcessFilesResult = Awaited<ReturnType<typeof processFilesForNotebookLm>>;
+const noopProgress = (_progress: ProcessingProgress): void => {
+  void _progress;
+};
 
-function createMockFile(content: string, name: string): File {
-  return new File([content], name, { type: "text/plain" });
+interface TestProcessArgs {
+  items?: QueuedImportItem[];
+  onProgress?: (progress: ProcessingProgress) => void;
+  signal?: AbortSignal;
 }
 
 const defaultLimits: SplitLimits = {
@@ -43,30 +48,73 @@ const defaultLimits: SplitLimits = {
   maxSourcesPerNotebook: 50,
 };
 
+function createMockFile(content: string, name: string): File {
+  return new File([content], name, { type: "text/plain" });
+}
+
+function createItem(queueId: string, fileName: string, file = createMockFile("content", fileName)): QueuedImportItem {
+  return {
+    queueId,
+    file,
+    fileName,
+    selectedJsonFields: [],
+    fieldOptions: [],
+  };
+}
+
+function createPreparedFile(originalName: string, content: string) {
+  return {
+    originalName,
+    normalizedName: originalName,
+    outputFormat: "txt" as const,
+    content,
+    sourceKind: "text" as const,
+  };
+}
+
+function runProcessFiles(args: TestProcessArgs = {}): Promise<ProcessFilesResult> {
+  const limits = {
+    maxWordsPerSource: 1000,
+    maxFileSizeMB: 10,
+    maxSourcesPerNotebook: 50,
+  };
+  const invocation: {
+    items: QueuedImportItem[];
+    limits: {
+      maxWordsPerSource: number;
+      maxFileSizeMB: number;
+      maxSourcesPerNotebook: number;
+    };
+    onProgress: (progress: ProcessingProgress) => void;
+    signal?: AbortSignal;
+  } = {
+    items: args.items ?? [],
+    limits,
+    onProgress: args.onProgress ?? noopProgress,
+    signal: args.signal,
+  };
+
+  return processFilesForNotebookLm(invocation);
+}
+
 describe("processFiles", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
+  registerProcessingTests();
+  registerCombinedFileTests();
+  registerAbortTests();
+  registerErrorHandlingTests();
+  registerProgressTests();
+});
+
+function registerProcessingTests(): void {
   describe("processFilesForNotebookLm", () => {
     it("processes single file successfully", async () => {
-      const file = createMockFile("test content", "test.txt");
-      const item: QueuedImportItem = {
-        queueId: "queue-1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
+      const item = createItem("queue-1", "test.txt", createMockFile("test content", "test.txt"));
 
-      mockPrepareFile.mockResolvedValue({
-        originalName: "test.txt",
-        normalizedName: "test.txt",
-        outputFormat: "txt",
-        content: "test content",
-        sourceKind: "text",
-      });
-
+      mockPrepareFile.mockResolvedValue(createPreparedFile("test.txt", "test content"));
       mockSplitFile.mockResolvedValue({
         originalName: "test.txt",
         normalizedName: "test.txt",
@@ -78,9 +126,8 @@ describe("processFiles", () => {
       });
 
       const onProgress = vi.fn();
-      const result = await processFilesForNotebookLm({
+      const result = await runProcessFiles({
         items: [item],
-        limits: defaultLimits,
         onProgress,
       });
 
@@ -88,7 +135,6 @@ describe("processFiles", () => {
       expect(result.errors).toHaveLength(0);
       expect(result.canceled).toBe(false);
       expect(result.completedQueueIds).toEqual(["queue-1"]);
-      expect(mockSplitFile).toHaveBeenCalledTimes(1);
       expect(mockSplitFile).toHaveBeenCalledWith(
         "test content",
         "test.txt",
@@ -102,25 +148,24 @@ describe("processFiles", () => {
       expect(onProgress).toHaveBeenCalled();
     });
 
-    it("combines multiple files into a single split source", async () => {
-      const file1 = createMockFile("content 1", "file1.txt");
-      const file2 = createMockFile("content 2", "file2.txt");
+    it("handles empty items array", async () => {
+      const result = await runProcessFiles();
 
+      expect(result.results).toHaveLength(0);
+      expect(result.errors).toHaveLength(0);
+      expect(result.canceled).toBe(false);
+      expect(result.completedQueueIds).toHaveLength(0);
+      expect(mockSplitFile).not.toHaveBeenCalled();
+    });
+  });
+}
+
+function registerCombinedFileTests(): void {
+  describe("combined files", () => {
+    it("combines multiple files into a single split source", async () => {
       mockPrepareFile
-      .mockResolvedValueOnce({
-        originalName: "file1.txt",
-        normalizedName: "file1.txt",
-        outputFormat: "txt",
-        content: "content 1",
-        sourceKind: "text",
-      })
-      .mockResolvedValueOnce({
-        originalName: "file2.txt",
-        normalizedName: "file2.txt",
-        outputFormat: "txt",
-        content: "content 2",
-        sourceKind: "text",
-      });
+        .mockResolvedValueOnce(createPreparedFile("file1.txt", "content 1"))
+        .mockResolvedValueOnce(createPreparedFile("file2.txt", "content 2"));
 
       mockSplitTextSegments.mockResolvedValue([
         {
@@ -132,16 +177,8 @@ describe("processFiles", () => {
         },
       ]);
 
-      const items: QueuedImportItem[] = [
-        { queueId: "q1", file: file1, fileName: "file1.txt", selectedJsonFields: [], fieldOptions: [] },
-        { queueId: "q2", file: file2, fileName: "file2.txt", selectedJsonFields: [], fieldOptions: [] },
-      ];
-
-      const onProgress = vi.fn();
-      const result = await processFilesForNotebookLm({
-        items,
-        limits: defaultLimits,
-        onProgress,
+      const result = await runProcessFiles({
+        items: [createItem("q1", "file1.txt"), createItem("q2", "file2.txt")],
       });
 
       expect(result.results).toHaveLength(1);
@@ -159,41 +196,21 @@ describe("processFiles", () => {
       expect(result.results[0].chunks[0].content).toContain("=== FILE: file1.txt ===");
       expect(result.results[0].chunks[0].content).toContain("=== FILE: file2.txt ===");
     });
+  });
+}
 
+function registerAbortTests(): void {
+  describe("aborts", () => {
     it("stops before combined splitting when the operation is aborted", async () => {
-      const file1 = createMockFile("content 1", "file1.txt");
-      const file2 = createMockFile("content 2", "file2.txt");
       const controller = new AbortController();
 
       mockPrepareFile
-        .mockResolvedValueOnce({
-          originalName: "file1.txt",
-          normalizedName: "file1.txt",
-          outputFormat: "txt",
-          content: "content 1",
-          sourceKind: "text",
-        })
-        .mockResolvedValueOnce({
-          originalName: "file2.txt",
-          normalizedName: "file2.txt",
-          outputFormat: "txt",
-          content: "content 2",
-          sourceKind: "text",
-        });
+        .mockResolvedValueOnce(createPreparedFile("file1.txt", "content 1"))
+        .mockResolvedValueOnce(createPreparedFile("file2.txt", "content 2"));
+      mockSplitTextSegments.mockRejectedValue(new ProcessingAbortedError());
 
-      mockSplitTextSegments.mockImplementation(async () => {
-        throw new ProcessingAbortedError();
-      });
-
-      const items: QueuedImportItem[] = [
-        { queueId: "q1", file: file1, fileName: "file1.txt", selectedJsonFields: [], fieldOptions: [] },
-        { queueId: "q2", file: file2, fileName: "file2.txt", selectedJsonFields: [], fieldOptions: [] },
-      ];
-
-      const result = await processFilesForNotebookLm({
-        items,
-        limits: defaultLimits,
-        onProgress: vi.fn(),
+      const result = await runProcessFiles({
+        items: [createItem("q1", "file1.txt"), createItem("q2", "file2.txt")],
         signal: controller.signal,
       });
 
@@ -203,24 +220,33 @@ describe("processFiles", () => {
       expect(mockSplitTextSegments).toHaveBeenCalledTimes(1);
     });
 
-    it("aggregates errors from failed files", async () => {
-      const file = createMockFile("content", "test.txt");
+    it("handles abort signal during processing", async () => {
+      const controller = new AbortController();
+      const item = createItem("queue-1", "test.txt");
 
+      mockPrepareFile.mockImplementation(() => {
+        controller.abort();
+        return Promise.reject(new ProcessingAbortedError());
+      });
+
+      const result = await runProcessFiles({
+        items: [item],
+        signal: controller.signal,
+      });
+
+      expect(result.canceled).toBe(true);
+      expect(mockSplitFile).not.toHaveBeenCalled();
+    });
+  });
+}
+
+function registerErrorHandlingTests(): void {
+  describe("errors", () => {
+    it("aggregates errors from failed files", async () => {
       mockPrepareFile.mockRejectedValue(new Error("Processing failed"));
 
-      const item: QueuedImportItem = {
-        queueId: "queue-1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
-
-      const onProgress = vi.fn();
-      const result = await processFilesForNotebookLm({
-        items: [item],
-        limits: defaultLimits,
-        onProgress,
+      const result = await runProcessFiles({
+        items: [createItem("queue-1", "test.txt")],
       });
 
       expect(result.results).toHaveLength(0);
@@ -229,65 +255,13 @@ describe("processFiles", () => {
       expect(result.errors[0]).toContain("Processing failed");
       expect(mockSplitFile).not.toHaveBeenCalled();
     });
+  });
+}
 
-    it("handles abort signal during processing", async () => {
-      const file = createMockFile("content", "test.txt");
-      const controller = new AbortController();
-
-      // Import the actual ProcessingAbortedError
-      const { ProcessingAbortedError } = await import("../utils/splitter/shared");
-
-      mockPrepareFile.mockImplementation(() => {
-        controller.abort();
-        return Promise.reject(new ProcessingAbortedError());
-      });
-
-      const item: QueuedImportItem = {
-        queueId: "queue-1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
-
-      const onProgress = vi.fn();
-      const result = await processFilesForNotebookLm({
-        items: [item],
-        limits: defaultLimits,
-        onProgress,
-        signal: controller.signal,
-      });
-
-      expect(result.canceled).toBe(true);
-      expect(mockSplitFile).not.toHaveBeenCalled();
-    });
-
-    it("handles empty items array", async () => {
-      const onProgress = vi.fn();
-      const result = await processFilesForNotebookLm({
-        items: [],
-        limits: defaultLimits,
-        onProgress,
-      });
-
-      expect(result.results).toHaveLength(0);
-      expect(result.errors).toHaveLength(0);
-      expect(result.canceled).toBe(false);
-      expect(result.completedQueueIds).toHaveLength(0);
-      expect(mockSplitFile).not.toHaveBeenCalled();
-    });
-
+function registerProgressTests(): void {
+  describe("progress", () => {
     it("emits progress updates during processing", async () => {
-      const file = createMockFile("content", "test.txt");
-
-      mockPrepareFile.mockResolvedValue({
-        originalName: "test.txt",
-        normalizedName: "test.txt",
-        outputFormat: "txt",
-        content: "content",
-        sourceKind: "text",
-      });
-
+      mockPrepareFile.mockResolvedValue(createPreparedFile("test.txt", "content"));
       mockSplitFile.mockResolvedValue({
         originalName: "test.txt",
         normalizedName: "test.txt",
@@ -298,21 +272,12 @@ describe("processFiles", () => {
         chunks: [],
       });
 
-      const item: QueuedImportItem = {
-        queueId: "queue-1",
-        file,
-        fileName: "test.txt",
-        selectedJsonFields: [],
-        fieldOptions: [],
-      };
-
-      const progressUpdates: any[] = [];
-      const onProgress = vi.fn((p) => progressUpdates.push(p));
-
-      await processFilesForNotebookLm({
-        items: [item],
-        limits: defaultLimits,
-        onProgress,
+      const progressUpdates: ProcessingProgress[] = [];
+      await runProcessFiles({
+        items: [createItem("queue-1", "test.txt")],
+        onProgress: (progress) => {
+          progressUpdates.push(progress);
+        },
       });
 
       expect(progressUpdates.length).toBeGreaterThan(0);
@@ -322,4 +287,4 @@ describe("processFiles", () => {
       });
     });
   });
-});
+}

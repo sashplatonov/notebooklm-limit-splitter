@@ -16,11 +16,12 @@ class MockFile extends File {
 class MockFileReader {
   result: string | ArrayBuffer | null = null;
   error: DOMException | null = null;
-  onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => any) | null = null;
-  onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => any) | null = null;
+  onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => void) | null = null;
+  onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => void) | null = null;
 
-  readAsText(file: File, _encoding?: string): void {
-    const content = fileContents.get(file) || "";
+  readAsText(file: File, encoding?: string): void {
+    void encoding;
+    const content = fileContents.get(file) ?? "";
     this.result = content;
     // Synchronous callback - this is key for the tests to work
     // The event must have target.result set for the code to work
@@ -61,10 +62,10 @@ global.localStorage = localStorageMock as Storage;
 global.Notification = {
   permission: "default",
   requestPermission: vi.fn().mockResolvedValue("granted"),
-} as any;
+} as unknown as typeof Notification;
 
 // Mock matchMedia
-global.matchMedia = vi.fn().mockImplementation((query: string) => ({
+global.matchMedia = vi.fn().mockImplementation((query: string): MediaQueryList => ({
   matches: false,
   media: query,
   onchange: null,
