@@ -8,7 +8,7 @@ export default function AppHeader(): JSX.Element {
           <BrandMark className="h-8 w-8 shrink-0" />
           <div>
             <h1 className="font-display text-base font-black uppercase tracking-[0.1em] text-slate-950 sm:text-lg">
-              NotebookLM Splitter
+              NotebookLM Limit Splitter
             </h1>
             <p className="text-[11px] text-slate-500">Split oversized source files for NotebookLM import</p>
           </div>

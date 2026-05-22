@@ -13,7 +13,7 @@
 - `npm run dev` starts the Vite development server for local UI work.
 - `npm run build` produces the production bundle in `dist/`.
 - `npm run preview -- --host 0.0.0.0 --port 4173` serves the built app for local smoke testing.
-- `docker build -t notebooklm-file-splitter-tool .` builds the production container image.
+- `docker build -t notebooklm-limit-splitter .` builds the production container image.
 - `docker compose up --build` builds and runs the local containerized stack without publishing ports to the host.
 
 ## Coding Style & Naming Conventions

@@ -1,4 +1,4 @@
-# NotebookLM File Splitter Tool {#top}
+# notebooklm-limit-splitter {#top}
 
 Browser-first React application for preparing large text and JSON exports for NotebookLM. The app normalizes supported files, splits oversized sources into smaller chunks, groups chunks into NotebookLM-ready notebook folders, and exports everything as a ZIP archive.
 
@@ -102,7 +102,7 @@ Use preview when you want to smoke-test the production bundle without the Node r
 ### Build the production image
 
 ```bash
-docker build -t notebooklm-file-splitter-tool .
+docker build -t notebooklm-limit-splitter .
 ```
 
 ### Validate the Compose file
@@ -119,7 +119,7 @@ docker compose up --build
 
 Current Compose behavior:
 
-- The app container exposes port `80` only to the internal `notebooklm-file-splitter-tool_app` network.
+- The app container exposes port `80` only to the internal `notebooklm-limit-splitter_app` network.
 - No host port is published by default.
 - Persistent processing stats are stored in the named volume `stats-data`.
 - Health checks call `http://127.0.0.1/health` inside the container.
@@ -141,7 +141,7 @@ docker compose config
 Use these extra checks when container behavior changed:
 
 ```bash
-docker build -t notebooklm-file-splitter-tool .
+docker build -t notebooklm-limit-splitter .
 curl -fsS http://127.0.0.1/health
 ```
 

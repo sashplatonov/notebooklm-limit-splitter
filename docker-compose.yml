@@ -1,10 +1,10 @@
 services:
-  notebooklm-file-splitter:
+  notebooklm-limit-splitter:
     build:
       context: .
       dockerfile: Dockerfile
       target: runtime
-    image: notebooklm-file-splitter-tool:local
+    image: notebooklm-limit-splitter:local
     expose:
       - "80"
     healthcheck:
@@ -21,7 +21,7 @@ services:
 
 networks:
   app:
-    name: notebooklm-file-splitter-tool_app
+    name: notebooklm-limit-splitter_app
     internal: true
 
 volumes:

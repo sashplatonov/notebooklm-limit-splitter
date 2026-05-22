@@ -40,7 +40,7 @@ export default function AppFooter({ lastRunSummary, resultsCount, stats, totalCh
       )}
       <FooterStats stats={stats} />
       <p className="text-center text-xs text-slate-400">
-        NotebookLM Splitter · Processing happens locally in your browser, files are never uploaded
+        NotebookLM Limit Splitter · Processing happens locally in your browser, files are never uploaded
       </p>
     </footer>
   );

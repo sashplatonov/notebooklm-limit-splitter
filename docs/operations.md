@@ -1,6 +1,6 @@
 # Operations Runbook {#top}
 
-Short operator notes for building, validating, and troubleshooting the NotebookLM File Splitter Tool runtime.
+Short operator notes for building, validating, and troubleshooting the notebooklm-limit-splitter runtime.
 
 ## Table of Contents {#table-of-contents}
 
@@ -27,7 +27,7 @@ npm run build
 Build the runtime image:
 
 ```bash
-docker build -t notebooklm-file-splitter-tool .
+docker build -t notebooklm-limit-splitter .
 ```
 
 Validate Compose before starting it:
