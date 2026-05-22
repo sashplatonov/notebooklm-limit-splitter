@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
+import { DEFAULT_LIMITS } from "../types";
 import type { JsonFieldConfig } from "../components/JsonFieldSelectorModal";
-import type { QueuedImportItem } from "./types";
-import { inspectJsonFile } from "../utils/filePipeline";
+import type { QueuedImportIssue, QueuedImportItem } from "./types";
+import { inspectJsonFile, validateFileBeforeRead } from "../utils/filePipeline";
 
 function createQueueId(file: File): string {
   return `${file.name}::${file.size}::${file.lastModified}::${crypto.randomUUID()}`;
@@ -9,28 +10,49 @@ function createQueueId(file: File): string {
 
 export function useImportQueue() {
   const [pendingImports, setPendingImports] = useState<QueuedImportItem[]>([]);
+  const [validationIssues, setValidationIssues] = useState<QueuedImportIssue[]>([]);
   const [activeJsonFieldConfig, setActiveJsonFieldConfig] = useState<JsonFieldConfig | null>(null);
 
-  const addFiles = useCallback(async (files: File[]) => {
-    const preparedItems = await Promise.all(
+  const addFiles = useCallback(async (files: File[], maxFileSizeMB = DEFAULT_LIMITS.maxFileSizeMB) => {
+    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    const preparedEntries = await Promise.all(
       files.map(async (file) => {
         const queueId = createQueueId(file);
+        const validationError = validateFileBeforeRead(file, maxFileSizeBytes);
+        if (validationError) {
+          return {
+            kind: "issue" as const,
+            issue: {
+              queueId,
+              fileName: file.name,
+              fileSizeBytes: file.size,
+              reason: validationError.reason,
+            },
+          };
+        }
+
         const inspection = file.name.toLowerCase().endsWith(".json")
-          ? await inspectJsonFile(file).catch(() => null)
+          ? await inspectJsonFile(file, maxFileSizeBytes).catch(() => null)
           : null;
         const fieldOptions = inspection?.fieldOptions ?? [];
 
         return {
-          queueId,
-          file,
-          fileName: file.name,
-          selectedJsonFields: fieldOptions.map((field) => field.path),
-          fieldOptions,
-        } satisfies QueuedImportItem;
+          kind: "item" as const,
+          item: {
+            queueId,
+            file,
+            fileName: file.name,
+            selectedJsonFields: fieldOptions.map((field) => field.path),
+            fieldOptions,
+          },
+        };
       }),
     );
 
+    const preparedItems = preparedEntries.flatMap((entry) => (entry.kind === "item" ? [entry.item] : []));
+    const issues = preparedEntries.flatMap((entry) => (entry.kind === "issue" ? [entry.issue] : []));
     setPendingImports((previous) => [...previous, ...preparedItems]);
+    setValidationIssues((previous) => [...previous, ...issues]);
   }, []);
 
   const removePendingImport = useCallback((queueId: string) => {
@@ -40,6 +62,7 @@ export function useImportQueue() {
 
   const clearPendingImports = useCallback(() => {
     setPendingImports([]);
+    setValidationIssues([]);
     setActiveJsonFieldConfig(null);
   }, []);
 
@@ -94,6 +117,7 @@ export function useImportQueue() {
     closeJsonFieldEditor,
     openJsonFieldEditor,
     pendingImports,
+    validationIssues,
     removeCompletedImports,
     removePendingImport,
     updateJsonFieldSelection,

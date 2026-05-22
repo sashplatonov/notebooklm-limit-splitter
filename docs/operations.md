@@ -45,8 +45,10 @@ docker compose up --build
 Assumptions:
 
 - The runtime serves the built SPA from `dist/`.
-- `server.mjs` listens on `${PORT:-80}`.
+- `server.mjs` normalizes `PORT` and falls back to `80` when the value is missing or invalid.
+- `STATS_DATA_DIR` defaults to `/data` and is resolved to an absolute path before startup.
 - Compose uses a named volume for persisted stats and does not publish a host port by default.
+- The runtime container runs as the unprivileged `node` user and only writes to the mounted data directory.
 
 [↑ Back to top](#top)
 
@@ -74,6 +76,8 @@ curl -fsS -X POST http://127.0.0.1/api/stats/record \
 
 Notes:
 
+- `POST /api/stats/record` requires `Content-Type: application/json`.
+- `filesProcessed` must be a non-negative integer or the server returns `4xx`.
 - These `curl` examples work only when the runtime is published to the host or executed directly outside the internal-only Compose network.
 - The health check used by Docker calls `http://127.0.0.1/health` inside the container, so a healthy container does not imply host reachability.
 
@@ -83,6 +87,7 @@ Notes:
 
 - Runtime counters are written to `${STATS_DATA_DIR:-/data}/processing-stats.json`.
 - Compose mounts `/data` from the named volume `stats-data`.
+- The server sends basic hardening headers on static and API responses.
 - Frontend code also caches stats in browser `localStorage`, so the UI can still render counters when the backend is temporarily unavailable.
 
 Quick checks:

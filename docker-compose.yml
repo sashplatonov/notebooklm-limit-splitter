@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile
       target: runtime
     image: notebooklm-limit-splitter:local
+    user: "node"
+    environment:
+      PORT: "80"
+      STATS_DATA_DIR: /data
     expose:
       - "80"
     healthcheck:

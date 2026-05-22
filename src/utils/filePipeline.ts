@@ -1,5 +1,6 @@
-import { NotebookTextFormat } from "../types";
+import { DEFAULT_LIMITS, NotebookTextFormat } from "../types";
 import { extractJsonFieldOptions, filterJsonFields, type JsonFieldOption } from "./jsonFields";
+import { formatBytes } from "./splitter/shared";
 
 export interface PreparedFile {
   originalName: string;
@@ -11,16 +12,22 @@ export interface PreparedFile {
 
 interface PrepareFileOptions {
   selectedJsonFields?: string[];
+  maxFileSizeBytes?: number;
 }
 
 export interface JsonFileInspection {
   fieldOptions: JsonFieldOption[];
 }
 
+export interface FileValidationError {
+  reason: string;
+}
+
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const CSV_EXTENSIONS = new Set([".csv"]);
 const TEXT_EXTENSIONS = new Set([".txt", ".log", ".xml", ".yaml", ".yml", ".ini", ".cfg"]);
 const JSON_EXTENSIONS = new Set([".json"]);
+const DEFAULT_MAX_FILE_SIZE_BYTES = DEFAULT_LIMITS.maxFileSizeMB * 1024 * 1024;
 
 export const INPUT_EXTENSIONS = [
   ".json",
@@ -55,6 +62,42 @@ function isTextLikeMime(type: string): boolean {
   );
 }
 
+function resolveMaxFileSizeBytes(maxFileSizeBytes?: number): number {
+  if (typeof maxFileSizeBytes === "number" && Number.isFinite(maxFileSizeBytes) && maxFileSizeBytes > 0) {
+    return maxFileSizeBytes;
+  }
+
+  return DEFAULT_MAX_FILE_SIZE_BYTES;
+}
+
+export function validateFileBeforeRead(
+  file: File,
+  maxFileSizeBytes?: number,
+): FileValidationError | null {
+  const resolvedMaxFileSizeBytes = resolveMaxFileSizeBytes(maxFileSizeBytes);
+  if (file.size > resolvedMaxFileSizeBytes) {
+    return {
+      reason: `${file.name} is ${formatBytes(file.size)}, which exceeds the pre-read limit of ${formatBytes(resolvedMaxFileSizeBytes)}. Lower the file size or increase Max file size in Settings.`,
+    };
+  }
+
+  const ext = getExt(file.name);
+  if (
+    !MARKDOWN_EXTENSIONS.has(ext) &&
+    !CSV_EXTENSIONS.has(ext) &&
+    !TEXT_EXTENSIONS.has(ext) &&
+    !JSON_EXTENSIONS.has(ext) &&
+    !isTextLikeMime(file.type)
+  ) {
+    return {
+      reason:
+        "This browser-only mode can currently normalize only text-based and JSON files. Binary formats such as PDF, DOCX, PPTX, EPUB, audio, and images require a separate converter.",
+    };
+  }
+
+  return null;
+}
+
 export async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -71,10 +114,18 @@ export async function readFileAsText(file: File): Promise<string> {
   });
 }
 
-export async function inspectJsonFile(file: File): Promise<JsonFileInspection | null> {
+export async function inspectJsonFile(
+  file: File,
+  maxFileSizeBytes?: number,
+): Promise<JsonFileInspection | null> {
   const ext = getExt(file.name);
   if (!JSON_EXTENSIONS.has(ext)) {
     return null;
+  }
+
+  const validationError = validateFileBeforeRead(file, maxFileSizeBytes);
+  if (validationError) {
+    throw new Error(validationError.reason);
   }
 
   const raw = await readFileAsText(file);
@@ -88,19 +139,12 @@ export async function prepareFileForNotebookLm(
   file: File,
   options: PrepareFileOptions = {},
 ): Promise<PreparedFile> {
-  const ext = getExt(file.name);
-  if (
-    !MARKDOWN_EXTENSIONS.has(ext) &&
-    !CSV_EXTENSIONS.has(ext) &&
-    !TEXT_EXTENSIONS.has(ext) &&
-    !JSON_EXTENSIONS.has(ext) &&
-    !isTextLikeMime(file.type)
-  ) {
-    throw new Error(
-      "This browser-only mode can currently normalize only text-based and JSON files. Binary formats such as PDF, DOCX, PPTX, EPUB, audio, and images require a separate converter."
-    );
+  const validationError = validateFileBeforeRead(file, options.maxFileSizeBytes);
+  if (validationError) {
+    throw new Error(validationError.reason);
   }
 
+  const ext = getExt(file.name);
   const raw = await readFileAsText(file);
 
   if (JSON_EXTENSIONS.has(ext)) {

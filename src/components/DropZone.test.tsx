@@ -34,7 +34,7 @@ describe("DropZone", () => {
   });
 
   describe("file input", () => {
-    it("filters files by accepted extensions", async () => {
+    it("passes through all selected files for queue validation", async () => {
       render(<DropZone onFiles={mockOnFiles} />);
 
       const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -53,9 +53,9 @@ describe("DropZone", () => {
 
       fireEvent.change(input, { target: { files: fileList } });
 
-      // Only the valid file should be passed
+      // The queue now decides whether files are accepted or blocked.
       expect(mockOnFiles).toHaveBeenCalledTimes(1);
-      expect(mockOnFiles).toHaveBeenCalledWith([validFile]);
+      expect(mockOnFiles).toHaveBeenCalledWith([validFile, invalidFile]);
     });
 
     it("resets input value after selection", async () => {
@@ -138,7 +138,7 @@ describe("DropZone", () => {
       expect(mockOnFiles).toHaveBeenCalledWith([mdFile]);
     });
 
-    it("rejects unsupported extensions", async () => {
+    it("passes unsupported extensions through for queue validation", async () => {
       render(<DropZone onFiles={mockOnFiles} />);
 
       const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -152,7 +152,7 @@ describe("DropZone", () => {
 
       fireEvent.change(input, { target: { files: fileList } });
 
-      expect(mockOnFiles).not.toHaveBeenCalled();
+      expect(mockOnFiles).toHaveBeenCalledWith([pdfFile]);
     });
   });
 });

@@ -12,8 +12,13 @@ RUN npm run build
 
 FROM node:${NODE_VERSION}-alpine AS runtime
 WORKDIR /app
-COPY --from=build /app/dist ./dist
-COPY server.mjs ./server.mjs
+RUN mkdir -p /data && chown node:node /data
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node server.mjs ./server.mjs
+ENV NODE_ENV=production \
+  PORT=80 \
+  STATS_DATA_DIR=/data
+USER node
 EXPOSE 80
 CMD ["node", "server.mjs"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

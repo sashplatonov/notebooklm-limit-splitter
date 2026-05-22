@@ -24,6 +24,7 @@ This repository ships a single-page workflow that runs file preparation in the b
 - `src/utils/splitter/` contains the chunking logic for text and JSON sources.
 - `src/app/notebookPlan.ts` sorts chunks into notebook buckets using the configured source-per-notebook limit.
 - `server.mjs` serves `dist/`, exposes health and stats endpoints, and persists aggregate processing counters under `/data`.
+- The runtime container runs as the unprivileged `node` user and normalizes `PORT` and `STATS_DATA_DIR` before startup.
 
 [↑ Back to top](#top)
 
@@ -36,6 +37,7 @@ This repository ships a single-page workflow that runs file preparation in the b
 - Builds a notebook distribution plan so the final ZIP is arranged into `notebook-<n>/` folders with at most the configured number of sources per notebook.
 - Stores split limits and browser notification preferences in `localStorage`.
 - Tracks `todayProcessed` and `totalProcessed` counters through the local `/api/stats` backend, with browser cache fallback if the backend is unavailable.
+- Rejects unsupported or oversized uploads before the browser reads file contents into memory.
 
 [↩ Back to toc](#table-of-contents)
 
@@ -166,8 +168,9 @@ The `curl` check applies only when the runtime is actually published to the host
 - `server.mjs` serves the built SPA from `dist/`.
 - `GET /health` returns `200 ok` for container and platform health checks.
 - `GET /api/stats` returns normalized processing stats.
-- `POST /api/stats/record` increments `todayProcessed` and `totalProcessed`.
+- `POST /api/stats/record` increments `todayProcessed` and `totalProcessed` when it receives valid JSON payloads.
 - Stats are persisted in `${STATS_DATA_DIR:-/data}/processing-stats.json`.
+- `POST /api/stats/record` expects `Content-Type: application/json` and a non-negative integer `filesProcessed` value.
 
 [↩ Back to toc](#table-of-contents)
 
@@ -190,6 +193,7 @@ The `curl` check applies only when the runtime is actually published to the host
 - `maxWordsPerSource`: `1000` to `500000`
 - `maxFileSizeMB`: `1` to `200`
 - `maxSourcesPerNotebook`: `1` to `50`
+- Files larger than the current `maxFileSizeMB` are rejected before the browser reads them.
 
 [↩ Back to toc](#table-of-contents)
 

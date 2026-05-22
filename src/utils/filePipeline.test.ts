@@ -3,6 +3,7 @@ import {
   readFileAsText,
   inspectJsonFile,
   prepareFileForNotebookLm,
+  validateFileBeforeRead,
   INPUT_EXTENSIONS,
 } from "./filePipeline";
 
@@ -75,6 +76,13 @@ describe("filePipeline", () => {
         ])
       );
     });
+
+    it("rejects oversized JSON files before reading them", async () => {
+      const json = JSON.stringify({ message: "too large" });
+      const file = new File([json], "test.json", { type: "application/json" });
+
+      await expect(inspectJsonFile(file, 1)).rejects.toThrow(/pre-read limit/);
+    });
   });
 
   describe("prepareFileForNotebookLm", () => {
@@ -136,6 +144,27 @@ describe("filePipeline", () => {
       const file = new File(["not valid json"], "test.json", { type: "application/json" });
       const result = await prepareFileForNotebookLm(file);
       expect(result.content).toBe("not valid json");
+    });
+
+    it("rejects oversized files before reading them", async () => {
+      const file = new File(["plain text"], "test.txt", { type: "text/plain" });
+      await expect(prepareFileForNotebookLm(file, { maxFileSizeBytes: 1 })).rejects.toThrow(
+        /pre-read limit/,
+      );
+    });
+  });
+
+  describe("validateFileBeforeRead", () => {
+    it("returns a validation error for unsupported files", () => {
+      const file = new File([new Uint8Array([1, 2, 3])], "test.pdf", { type: "application/pdf" });
+      const validationError = validateFileBeforeRead(file, 1024);
+      expect(validationError?.reason).toContain("Binary formats");
+    });
+
+    it("returns a validation error for oversized files", () => {
+      const file = new File(["plain text"], "test.txt", { type: "text/plain" });
+      const validationError = validateFileBeforeRead(file, 1);
+      expect(validationError?.reason).toContain("pre-read limit");
     });
   });
 

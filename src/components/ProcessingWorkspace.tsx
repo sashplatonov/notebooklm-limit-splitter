@@ -1,5 +1,5 @@
 import type { BrowserNotificationPermission } from "../app/browserNotifications";
-import type { NotebookPlan, ProcessingProgress, QueuedImportItem } from "../app/types";
+import type { NotebookPlan, ProcessingProgress, QueuedImportIssue, QueuedImportItem } from "../app/types";
 import type { SplitLimits, SplitResult } from "../types";
 import DropZone from "./DropZone";
 import EmptyState from "./EmptyState";
@@ -28,6 +28,7 @@ interface Props {
   onStartProcessing: () => void;
   onStopProcessing: () => void;
   pendingImports: QueuedImportItem[];
+  validationIssues: QueuedImportIssue[];
   onToggleSettings: () => void;
   processing: boolean;
   progress: ProcessingProgress;
@@ -56,6 +57,7 @@ export default function ProcessingWorkspace(props: Props) {
     onStartProcessing,
     onStopProcessing,
     pendingImports,
+    validationIssues,
     onToggleSettings,
     processing,
     progress,
@@ -86,6 +88,7 @@ export default function ProcessingWorkspace(props: Props) {
             onRemove={onRemovePendingImport}
             onStart={onStartProcessing}
             processing={processing}
+            validationIssues={validationIssues}
           />
 
           {results.length > 0 && (

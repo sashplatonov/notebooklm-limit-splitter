@@ -29,6 +29,13 @@ export interface ImportSummary {
   filesProcessed: number;
 }
 
+export interface QueuedImportIssue {
+  queueId: string;
+  fileName: string;
+  fileSizeBytes: number;
+  reason: string;
+}
+
 export interface SplitResult {
   originalName: string;
   normalizedName: string;

@@ -3,9 +3,14 @@ import { renderHook, act } from "@testing-library/react";
 import { useImportQueue } from "./useImportQueue";
 
 // Mock dependencies
-vi.mock("../utils/filePipeline", () => ({
-  inspectJsonFile: vi.fn(),
-}));
+vi.mock("../utils/filePipeline", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/filePipeline")>();
+  return {
+    ...actual,
+    inspectJsonFile: vi.fn(),
+    validateFileBeforeRead: vi.fn(actual.validateFileBeforeRead),
+  };
+});
 
 import { inspectJsonFile } from "../utils/filePipeline";
 
@@ -80,6 +85,33 @@ describe("useImportQueue", () => {
       });
 
       expect(result.current.pendingImports).toHaveLength(2);
+    });
+
+    it("records validation issues for unsupported files before reading them", async () => {
+      const file = new File([], "test.pdf", { type: "application/pdf" });
+      const { result } = renderHook(() => useImportQueue());
+
+      await act(async () => {
+        await result.current.addFiles([file]);
+      });
+
+      expect(result.current.pendingImports).toHaveLength(0);
+      expect(result.current.validationIssues).toHaveLength(1);
+      expect(result.current.validationIssues[0].fileName).toBe("test.pdf");
+      expect(mockInspectJsonFile).not.toHaveBeenCalled();
+    });
+
+    it("records validation issues for oversized files before reading them", async () => {
+      const file = createMockFile("content", "test.txt");
+      const { result } = renderHook(() => useImportQueue());
+
+      await act(async () => {
+        await result.current.addFiles([file], 0.000001);
+      });
+
+      expect(result.current.pendingImports).toHaveLength(0);
+      expect(result.current.validationIssues).toHaveLength(1);
+      expect(result.current.validationIssues[0].fileName).toBe("test.txt");
     });
   });
 

@@ -16,12 +16,9 @@ export default function DropZone({ onFiles }: Props) {
       if (!fileList) {
         return;
       }
-      const arr = Array.from(fileList).filter((f) => {
-        const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
-        return ACCEPTED.includes(ext);
-      });
-      if (arr.length > 0) {
-        onFiles(arr);
+      const files = Array.from(fileList);
+      if (files.length > 0) {
+        onFiles(files);
       }
     },
     [onFiles]
@@ -81,6 +78,9 @@ export default function DropZone({ onFiles }: Props) {
         </p>
         <p className="text-sm text-slate-500">
           JSON, TXT, MD, CSV, YAML, XML, LOG → TXT / MD / CSV
+        </p>
+        <p className="text-xs text-slate-500">
+          Unsupported or oversized files are blocked before the app reads them.
         </p>
       </div>
 

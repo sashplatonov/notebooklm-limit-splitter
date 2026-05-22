@@ -19,7 +19,7 @@ import AppHeader from "./components/AppHeader";
 import HeroSection from "./components/HeroSection";
 import JsonFieldSelectorModal from "./components/JsonFieldSelectorModal";
 import ProcessingWorkspace from "./components/ProcessingWorkspace";
-import { DEFAULT_LIMITS, type SplitLimits, type SplitResult } from "./types";
+import type { SplitLimits, SplitResult } from "./types";
 import { createZipBlob, downloadBlob } from "./utils/zip";
 
 function downloadArchiveForResults(
@@ -137,7 +137,7 @@ export default function App() {
         <HeroSection />
         <ProcessingWorkspace
           errorMessage={processing.errorMessage}
-          handleFiles={queue.addFiles}
+          handleFiles={(files) => queue.addFiles(files, limits.maxFileSizeMB)}
           limits={limits}
           notificationPermission={notificationPermission}
           notificationsEnabled={notificationsEnabled}
@@ -155,6 +155,7 @@ export default function App() {
           onStopProcessing={processing.stopProcessing}
           onToggleSettings={() => setSettingsOpen((previous) => !previous)}
           pendingImports={queue.pendingImports}
+          validationIssues={queue.validationIssues}
           processing={processing.processing}
           progress={processing.progress}
           results={results}

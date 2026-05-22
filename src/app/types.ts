@@ -1,5 +1,6 @@
 import type { ImportSummary, SplitChunk, SplitResult } from "../types";
 import type { JsonFieldOption } from "../utils/jsonFields";
+import type { QueuedImportIssue } from "../types";
 
 export interface ChunkPlacement {
   notebookNumber: number;
@@ -58,3 +59,5 @@ export interface QueuedImportItem {
   selectedJsonFields: string[];
   fieldOptions: JsonFieldOption[];
 }
+
+export type { QueuedImportIssue };

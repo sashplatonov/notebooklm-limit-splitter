@@ -120,7 +120,7 @@ export async function recordProcessedFiles(
   filesProcessed: number,
 ): Promise<ProcessingStats> {
   const normalizedStats = normalizeStats(currentStats);
-  const safeProcessedCount = Math.max(0, filesProcessed);
+  const safeProcessedCount = Number.isFinite(filesProcessed) ? Math.max(0, Math.trunc(filesProcessed)) : 0;
   if (safeProcessedCount === 0) {
     return normalizedStats;
   }
