@@ -46,6 +46,7 @@ describe("ResultCard", () => {
 
     const { container } = render(
       <ResultCard
+        lastRunSummary={null}
         maxSourcesPerNotebook={defaultProps.maxSourcesPerNotebook}
         result={result}
         placements={[{ notebookNumber: 1, sortOrder: 0, startDate: null, endDate: null }]}
@@ -93,6 +94,7 @@ describe("ResultCard", () => {
 
     render(
       <ResultCard
+        lastRunSummary={null}
         maxSourcesPerNotebook={defaultProps.maxSourcesPerNotebook}
         result={result}
         placements={[
@@ -146,6 +148,7 @@ describe("ResultCard", () => {
 
     render(
       <ResultCard
+        lastRunSummary={null}
         maxSourcesPerNotebook={50}
         result={result}
         placements={result.chunks.map((_, index) => ({

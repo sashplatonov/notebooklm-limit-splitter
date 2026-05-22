@@ -69,11 +69,11 @@ export default function ProcessingWorkspace(props: Props) {
   return (
     <>
       <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div>
             <DropZone onFiles={handleFiles} />
             {errorMessage && (
-              <div className="mt-4 rounded-[1.6rem] border-2 border-red-500 bg-[#fff1f2] px-5 py-4">
+              <div className="mt-3 rounded-[1.4rem] border-2 border-red-500 bg-[#fff1f2] px-4 py-3">
                 <p className="text-sm font-semibold text-red-700">Failed to process file</p>
                 <p className="mt-1 break-words text-xs text-red-600">{errorMessage}</p>
               </div>
@@ -107,7 +107,7 @@ export default function ProcessingWorkspace(props: Props) {
           )}
         </div>
 
-        <aside className="space-y-6">
+        <aside className="space-y-4">
           <LimitStats limits={limits} />
           <SettingsPanel
             limits={limits}

@@ -9,13 +9,19 @@ vi.mock("../utils/splitter", () => ({
   formatNumber: (value: number) => String(value),
 }));
 
-vi.mock("../app/formatting", () => ({
-  formatDateTime: (value: string) => `DT:${value}`,
-  formatDuration: (value: number) => `DUR:${value}`,
-}));
-
 vi.mock("./ResultCard", () => ({
-  default: ({ result }: { result: SplitResult }) => <article data-testid="result-card">{result.originalName}</article>,
+  default: ({
+    lastRunSummary,
+    result,
+  }: {
+    lastRunSummary: LastRunSummary | null;
+    result: SplitResult;
+  }) => (
+    <article data-testid="result-card">
+      {result.originalName}
+      {lastRunSummary ? " summary" : ""}
+    </article>
+  ),
 }));
 
 function createResult(
@@ -41,7 +47,7 @@ function createResult(
 }
 
 describe("ResultsSection", () => {
-  it("shows the run summary, notebook hint, cards, and action buttons", () => {
+  it("shows the notebook hint, cards, and action buttons", () => {
     const onClearAll = vi.fn();
     const onDownloadArchive = vi.fn();
     const onRemoveResult = vi.fn();
@@ -84,15 +90,11 @@ describe("ResultsSection", () => {
       />,
     );
 
-    expect(screen.getByText("Last import summary")).toBeTruthy();
-    expect(screen.getByText((_, element) => element?.textContent?.trim() === "Started: DT:2026-05-22T10:00:00.000Z")).toBeTruthy();
-    expect(screen.getByText((_, element) => element?.textContent?.trim() === "Finished: DT:2026-05-22T10:05:00.000Z")).toBeTruthy();
-    expect(screen.getByText((_, element) => element?.textContent?.trim() === "Duration: DUR:300000")).toBeTruthy();
-    expect(screen.getByText((_, element) => element?.textContent?.trim() === "Files: 2")).toBeTruthy();
     expect(screen.getByText("You will need 2 NotebookLM notebooks")).toBeTruthy();
     expect(screen.getByText("Notebook 1: chunks 1-2")).toBeTruthy();
     expect(screen.getByText("Notebook 2: chunks 3-3")).toBeTruthy();
     expect(screen.getAllByTestId("result-card")).toHaveLength(2);
+    expect(screen.getAllByText(/summary$/i)).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: /clear all/i }));
     fireEvent.click(screen.getByRole("button", { name: /download all as zip/i }));

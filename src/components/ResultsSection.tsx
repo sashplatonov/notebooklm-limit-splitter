@@ -1,4 +1,3 @@
-import { formatDateTime, formatDuration } from "../app/formatting";
 import type { ChunkPlacement, LastRunSummary } from "../app/types";
 import type { SplitLimits, SplitResult } from "../types";
 import { formatBytes, formatNumber } from "../utils/splitter";
@@ -18,28 +17,6 @@ interface ResultsSectionProps {
   totalWords: number;
 }
 
-function LastRunSummaryCard({ summary }: { summary: LastRunSummary }): JSX.Element {
-  return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-      <p className="text-sm font-semibold text-emerald-800">Last import summary</p>
-      <div className="mt-2 grid gap-2 text-xs text-emerald-700 sm:grid-cols-4">
-        <div>
-          <span className="font-medium">Started:</span> {formatDateTime(summary.startedAt)}
-        </div>
-        <div>
-          <span className="font-medium">Finished:</span> {formatDateTime(summary.finishedAt)}
-        </div>
-        <div>
-          <span className="font-medium">Duration:</span> {formatDuration(summary.durationMs)}
-        </div>
-        <div>
-          <span className="font-medium">Files:</span> {summary.filesProcessed}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function NotebookPlanHint({
   totalChunks,
   totalNotebooks,
@@ -54,22 +31,22 @@ function NotebookPlanHint({
   }
 
   return (
-    <div className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-4">
+    <div className="rounded-[1.2rem] border-2 border-slate-950 bg-[#fff4e8] px-4 py-3 shadow-[5px_5px_0_0_rgba(15,23,42,0.06)]">
       <div className="flex items-start gap-3">
-        <span className="text-xl">📚</span>
-        <div className="space-y-1.5">
-          <p className="text-sm font-semibold text-violet-800">
+        <span className="text-lg">📚</span>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-slate-900">
             You will need {totalNotebooks} NotebookLM notebook{totalNotebooks !== 1 ? "s" : ""}
           </p>
-          <p className="text-xs text-violet-600">
+          <p className="text-xs leading-5 text-slate-600">
             There are {totalChunks} total chunks with a limit of {maxSourcesPerNotebook} sources per notebook. The distribution is shown in each file card.
           </p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {Array.from({ length: totalNotebooks }).map((_, notebookIndex) => {
               const start = notebookIndex * maxSourcesPerNotebook + 1;
               const end = Math.min((notebookIndex + 1) * maxSourcesPerNotebook, totalChunks);
               return (
-                <span key={notebookIndex} className="rounded-full border border-violet-200 bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
+                <span key={notebookIndex} className="rounded-full border border-slate-950/10 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                   Notebook {notebookIndex + 1}: chunks {start}-{end}
                 </span>
               );
@@ -95,19 +72,17 @@ export default function ResultsSection({
   totalWords,
 }: ResultsSectionProps): JSX.Element {
   return (
-    <div className="space-y-4">
-      {lastRunSummary && <LastRunSummaryCard summary={lastRunSummary} />}
-
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-slate-700">Results</h3>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <h3 className="font-display text-lg font-black uppercase tracking-[0.08em] text-slate-950">Results</h3>
+          <p className="mt-0.5 text-xs text-slate-500">
             {formatNumber(totalWords)} words · {formatBytes(totalBytes)} · {totalChunks} chunks · {totalNotebooks} notebook{totalNotebooks !== 1 ? "s" : ""}
           </p>
         </div>
         <button
           onClick={onClearAll}
-          className="flex items-center gap-1 text-xs font-medium text-red-400 transition-colors hover:text-red-600"
+          className="flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-100"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -119,7 +94,7 @@ export default function ResultsSection({
       <div className="flex items-center gap-2">
         <button
           onClick={onDownloadArchive}
-          className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-100"
+          className="inline-flex items-center gap-2 rounded-full border-2 border-slate-950 bg-[#ecfeff] px-3.5 py-1.5 text-sm font-semibold text-slate-900 transition-colors hover:bg-[#d8fbff]"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16m-7 5h7" />
@@ -134,10 +109,11 @@ export default function ResultsSection({
         maxSourcesPerNotebook={limits.maxSourcesPerNotebook}
       />
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {results.map((result, index) => (
           <ResultCard
             key={`${result.originalName}-${index}`}
+            lastRunSummary={lastRunSummary}
             maxSourcesPerNotebook={limits.maxSourcesPerNotebook}
             result={result}
             placements={chunkPlacements[index]}

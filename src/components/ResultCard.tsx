@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { formatDateTime, formatDuration } from "../app/formatting";
+import type { LastRunSummary } from "../app/types";
 import { SplitResult } from "../types";
 import { formatBytes, formatNumber } from "../utils/splitter";
 import { createZipBlob, downloadBlob } from "../utils/zip";
@@ -12,6 +14,7 @@ interface ChunkPlacement {
 }
 
 interface Props {
+  lastRunSummary: LastRunSummary | null;
   maxSourcesPerNotebook: number;
   result: SplitResult;
   placements: ChunkPlacement[];
@@ -59,57 +62,73 @@ function downloadZip(result: SplitResult, placements: ChunkPlacement[]) {
 }
 
 function ResultHeader({
+  lastRunSummary,
   needsSplit,
   onRemove,
   result,
 }: {
+  lastRunSummary: LastRunSummary | null;
   needsSplit: boolean;
   onRemove: () => void;
   result: SplitResult;
 }): JSX.Element {
   return (
-    <div className="flex items-start justify-between gap-4 px-6 py-4">
+    <div className="flex items-start justify-between gap-3 px-4 py-3.5">
       <div className="flex min-w-0 items-start gap-3">
-        <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold
+        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.9rem] border-2 border-slate-950 text-[11px] font-black
           ${result.fileType === "json"
-            ? "border border-amber-200 bg-amber-50 text-amber-600"
-            : "border border-sky-200 bg-sky-50 text-sky-600"
+            ? "bg-[#fff1df] text-orange-700"
+            : "bg-[#ecfeff] text-teal-700"
           }`}
         >
           {result.outputFormat.toUpperCase()}
         </div>
 
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-slate-800">{result.originalName}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+          <div className="truncate text-sm font-semibold text-slate-900">{result.originalName}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-slate-500">
             <span>{formatNumber(result.originalWordCount)} words</span>
             <span>·</span>
             <span>{formatBytes(result.originalSizeBytes)}</span>
             <span>·</span>
-            <span className="text-slate-500">normalized → {result.normalizedName}</span>
+            <span>normalized → {result.normalizedName}</span>
             {needsSplit && (
               <>
                 <span>·</span>
-                <span className="font-medium text-orange-500">→ {result.chunks.length} chunks</span>
+                <span className="font-semibold text-orange-600">→ {result.chunks.length} chunks</span>
               </>
             )}
           </div>
+          {lastRunSummary && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span className="rounded-full bg-[#fff4e8] px-2 py-1 font-semibold text-orange-700">Last import summary</span>
+              <span className="text-slate-500">
+                {formatDateTime(lastRunSummary.startedAt)} → {formatDateTime(lastRunSummary.finishedAt)}
+              </span>
+              <span className="text-slate-400">·</span>
+              <span className="text-slate-600">{formatDuration(lastRunSummary.durationMs)}</span>
+              <span className="text-slate-400">·</span>
+              <span className="text-slate-600">
+                {lastRunSummary.filesProcessed} file{lastRunSummary.filesProcessed !== 1 ? "s" : ""} in batch
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
         {needsSplit ? (
-          <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-600">
+          <span className="rounded-full border border-orange-200 bg-[#fff4e8] px-2.5 py-1 text-[11px] font-semibold text-orange-700">
             Split
           </span>
         ) : (
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
+          <span className="rounded-full border border-teal-200 bg-[#ecfeff] px-2.5 py-1 text-[11px] font-semibold text-teal-700">
             Ready
           </span>
         )}
         <button
           onClick={onRemove}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-red-50 hover:text-red-400"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -130,26 +149,26 @@ function ResultStats({
   originalWordCount: number;
 }): JSX.Element {
   return (
-    <div className="mx-6 mb-4 grid grid-cols-3 divide-x divide-slate-100 rounded-xl border border-slate-100 bg-slate-50 text-center">
-      <div className="py-3">
-        <div className="text-lg font-bold text-slate-700">{chunkCount}</div>
-        <div className="text-xs text-slate-400">chunks</div>
+    <div className="mx-4 mb-3 grid grid-cols-3 divide-x divide-slate-950/10 overflow-hidden rounded-[1.1rem] border-2 border-slate-950 bg-[#fff8ef] text-center shadow-[4px_4px_0_0_rgba(15,23,42,0.05)]">
+      <div className="py-2">
+        <div className="text-base font-black text-slate-900">{chunkCount}</div>
+        <div className="text-[11px] text-slate-500">chunks</div>
       </div>
-      <div className="py-3">
-        <div className="text-lg font-bold text-violet-600">{notebooksNeeded}</div>
-        <div className="text-xs text-slate-400">notebook{notebooksNeeded !== 1 ? "s" : ""}</div>
+      <div className="py-2">
+        <div className="text-base font-black text-teal-700">{notebooksNeeded}</div>
+        <div className="text-[11px] text-slate-500">notebook{notebooksNeeded !== 1 ? "s" : ""}</div>
       </div>
-      <div className="py-3">
-        <div className="text-lg font-bold text-slate-700">
+      <div className="py-2">
+        <div className="text-base font-black text-slate-900">
           {formatNumber(Math.round(originalWordCount / chunkCount))}
         </div>
-        <div className="text-xs text-slate-400">words / chunk</div>
+        <div className="text-[11px] text-slate-500">words / chunk</div>
       </div>
     </div>
   );
 }
 
-export default function ResultCard({ maxSourcesPerNotebook, result, placements, onRemove }: Props) {
+export default function ResultCard({ lastRunSummary, maxSourcesPerNotebook, result, placements, onRemove }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const needsSplit = result.chunks.length > 1;
@@ -160,8 +179,8 @@ export default function ResultCard({ maxSourcesPerNotebook, result, placements, 
   const lastNotebook = notebookNumbers.length > 0 ? Math.max(...notebookNumbers) : 1;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <ResultHeader needsSplit={needsSplit} onRemove={onRemove} result={result} />
+    <div className="overflow-hidden rounded-[1.4rem] border-2 border-slate-950 bg-[color:var(--color-surface)] shadow-[7px_7px_0_0_rgba(15,23,42,0.08)]">
+      <ResultHeader lastRunSummary={lastRunSummary} needsSplit={needsSplit} onRemove={onRemove} result={result} />
       {needsSplit && (
         <ResultStats
           chunkCount={result.chunks.length}
@@ -188,8 +207,8 @@ export default function ResultCard({ maxSourcesPerNotebook, result, placements, 
         />
       )}
       {needsSplit && assignedNotebookCount > 1 && (
-        <div className="border-t border-slate-100 px-6 py-3 bg-amber-50">
-          <p className="text-xs text-amber-700">
+        <div className="border-t border-slate-950/10 bg-[#fff4e8] px-4 py-2.5">
+          <p className="text-[11px] leading-5 text-orange-800">
             This file was split into {result.chunks.length} chunks and fits within {notebooksNeeded} NotebookLM notebook{notebooksNeeded !== 1 ? "s" : ""} by the source-count limit.
             {" "}Its chunks are currently assigned across notebook {firstNotebook}-{lastNotebook} in the combined import plan.
           </p>
