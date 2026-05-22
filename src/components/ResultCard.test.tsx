@@ -139,7 +139,7 @@ describe("ResultCard", () => {
     createElementSpy.mockRestore();
   });
 
-  it("separates per-file notebook need from global plan placement", () => {
+  it("uses per-split notebook numbering in ZIP exports and summary text", () => {
     const result = createResult(
       Array.from({ length: 34 }, (_, index) => ({
         index,
@@ -152,10 +152,10 @@ describe("ResultCard", () => {
 
     render(
       <ResultCard
-        maxSourcesPerNotebook={50}
+        maxSourcesPerNotebook={20}
         result={result}
         placements={result.chunks.map((_, index) => ({
-          notebookNumber: index < 16 ? 1 : 2,
+          notebookNumber: index < 20 ? 1 : 2,
           sortOrder: index,
           startDate: null,
           endDate: null,
@@ -164,12 +164,23 @@ describe("ResultCard", () => {
       />,
     );
 
-    expect(screen.getByText("1")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /download zip/i })[0]);
+
+    expect(createZipBlob).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        {
+          name: "notebook-1/source_01.txt",
+          content: "chunk 1",
+        },
+        {
+          name: "notebook-2/source_34.txt",
+          content: "chunk 34",
+        },
+      ]),
+    );
+    expect(screen.getByText("2")).toBeTruthy();
     expect(
-      screen.getByText(/fits within 1 NotebookLM notebook by the source-count limit/i),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/assigned across notebook 1-2 in the combined import plan/i),
+      screen.getByText(/fits within 2 NotebookLM notebooks by the source-count limit/i),
     ).toBeTruthy();
   });
 });

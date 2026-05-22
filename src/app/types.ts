@@ -36,6 +36,7 @@ export interface NotebookPlan {
   flatChunks: PlannedChunk[];
   sortedChunks: PlannedChunk[];
   chunkPlacements: ChunkPlacement[][];
+  notebookCountsByResult: number[];
   totalChunks: number;
   totalNotebooks: number;
   totalWords: number;

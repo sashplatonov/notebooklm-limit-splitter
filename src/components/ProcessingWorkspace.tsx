@@ -92,6 +92,7 @@ export default function ProcessingWorkspace(props: Props) {
             <ResultsSection
               chunkPlacements={notebookPlan.chunkPlacements}
               limits={limits}
+              notebookCountsByResult={notebookPlan.notebookCountsByResult}
               onClearAll={onClearAll}
               onDownloadArchive={onDownloadArchive}
               onRemoveResult={onRemoveResult}

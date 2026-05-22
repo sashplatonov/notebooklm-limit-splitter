@@ -167,8 +167,6 @@ export default function ResultCard({ maxSourcesPerNotebook, result, placements, 
   const notebookNumbers = placements.map((placement) => placement.notebookNumber);
   const notebooksNeeded = Math.max(1, Math.ceil(result.chunks.length / maxSourcesPerNotebook));
   const assignedNotebookCount = new Set(notebookNumbers).size;
-  const firstNotebook = notebookNumbers.length > 0 ? Math.min(...notebookNumbers) : 1;
-  const lastNotebook = notebookNumbers.length > 0 ? Math.max(...notebookNumbers) : 1;
 
   return (
     <div className="overflow-hidden rounded-[1.4rem] border-2 border-slate-950 bg-[color:var(--color-surface)] shadow-[7px_7px_0_0_rgba(15,23,42,0.08)]">
@@ -202,7 +200,6 @@ export default function ResultCard({ maxSourcesPerNotebook, result, placements, 
         <div className="border-t border-slate-950/10 bg-[#fff4e8] px-4 py-2.5">
           <p className="text-[11px] leading-5 text-orange-800">
             This file was split into {result.chunks.length} chunks and fits within {notebooksNeeded} NotebookLM notebook{notebooksNeeded !== 1 ? "s" : ""} by the source-count limit.
-            {" "}Its chunks are currently assigned across notebook {firstNotebook}-{lastNotebook} in the combined import plan.
           </p>
         </div>
       )}

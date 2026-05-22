@@ -6,6 +6,7 @@ import ResultCard from "./ResultCard";
 interface ResultsSectionProps {
   chunkPlacements: ChunkPlacement[][];
   limits: SplitLimits;
+  notebookCountsByResult: number[];
   onClearAll: () => void;
   onDownloadArchive: () => void;
   onRemoveResult: (index: number) => void;
@@ -17,11 +18,11 @@ interface ResultsSectionProps {
 }
 
 function NotebookPlanHint({
-  totalChunks,
+  notebookCountsByResult,
   totalNotebooks,
   maxSourcesPerNotebook,
 }: {
-  totalChunks: number;
+  notebookCountsByResult: number[];
   totalNotebooks: number;
   maxSourcesPerNotebook: number;
 }) {
@@ -38,15 +39,13 @@ function NotebookPlanHint({
             You will need {totalNotebooks} NotebookLM notebook{totalNotebooks !== 1 ? "s" : ""}
           </p>
           <p className="text-xs leading-5 text-slate-600">
-            There are {totalChunks} total chunks with a limit of {maxSourcesPerNotebook} sources per notebook. The distribution is shown in each file card.
+            Each split keeps its own limit of {maxSourcesPerNotebook} sources per notebook, and the distribution is shown in each file card.
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {Array.from({ length: totalNotebooks }).map((_, notebookIndex) => {
-              const start = notebookIndex * maxSourcesPerNotebook + 1;
-              const end = Math.min((notebookIndex + 1) * maxSourcesPerNotebook, totalChunks);
+            {notebookCountsByResult.map((notebookCount, resultIndex) => {
               return (
-                <span key={notebookIndex} className="rounded-full border border-slate-950/10 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                  Notebook {notebookIndex + 1}: chunks {start}-{end}
+                <span key={resultIndex} className="rounded-full border border-slate-950/10 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                  Split {resultIndex + 1}: {notebookCount} notebook{notebookCount !== 1 ? "s" : ""}
                 </span>
               );
             })}
@@ -60,6 +59,7 @@ function NotebookPlanHint({
 export default function ResultsSection({
   chunkPlacements,
   limits,
+  notebookCountsByResult,
   onClearAll,
   onDownloadArchive,
   onRemoveResult,
@@ -102,7 +102,7 @@ export default function ResultsSection({
       </div>
 
       <NotebookPlanHint
-        totalChunks={totalChunks}
+        notebookCountsByResult={notebookCountsByResult}
         totalNotebooks={totalNotebooks}
         maxSourcesPerNotebook={limits.maxSourcesPerNotebook}
       />

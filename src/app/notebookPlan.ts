@@ -59,6 +59,40 @@ function createEmptyPlacements(results: SplitResult[]): ChunkPlacement[][] {
   );
 }
 
+function createLocalPlacements(
+  results: SplitResult[],
+  maxSourcesPerNotebook: number,
+): { chunkPlacements: ChunkPlacement[][]; notebookCountsByResult: number[] } {
+  const chunkPlacements = createEmptyPlacements(results);
+  const notebookCountsByResult = results.map((result) => Math.ceil(result.chunks.length / maxSourcesPerNotebook));
+
+  results.forEach((result, resultIndex) => {
+    const sortedChunks = result.chunks
+      .map((chunk, chunkIndex) => {
+        const range = getChunkDateRange(chunk);
+        return {
+          resultIndex,
+          chunkIndex,
+          chunk,
+          startDate: range.startDate,
+          endDate: range.endDate,
+        };
+      })
+      .sort(sortPlannedChunks);
+
+    sortedChunks.forEach((item, sortOrder) => {
+      chunkPlacements[item.resultIndex][item.chunkIndex] = {
+        notebookNumber: Math.floor(sortOrder / maxSourcesPerNotebook) + 1,
+        sortOrder,
+        startDate: item.startDate,
+        endDate: item.endDate,
+      };
+    });
+  });
+
+  return { chunkPlacements, notebookCountsByResult };
+}
+
 export function buildNotebookPlan(results: SplitResult[], maxSourcesPerNotebook: number): NotebookPlan {
   const flatChunks = results.flatMap((result, resultIndex) =>
     result.chunks.map((chunk, chunkIndex) => {
@@ -74,23 +108,15 @@ export function buildNotebookPlan(results: SplitResult[], maxSourcesPerNotebook:
   );
 
   const sortedChunks = [...flatChunks].sort(sortPlannedChunks);
-  const chunkPlacements = createEmptyPlacements(results);
-
-  sortedChunks.forEach((item, sortOrder) => {
-    chunkPlacements[item.resultIndex][item.chunkIndex] = {
-      notebookNumber: Math.floor(sortOrder / maxSourcesPerNotebook) + 1,
-      sortOrder,
-      startDate: item.startDate,
-      endDate: item.endDate,
-    };
-  });
+  const { chunkPlacements, notebookCountsByResult } = createLocalPlacements(results, maxSourcesPerNotebook);
 
   return {
     flatChunks,
     sortedChunks,
     chunkPlacements,
+    notebookCountsByResult,
     totalChunks: flatChunks.length,
-    totalNotebooks: Math.ceil(flatChunks.length / maxSourcesPerNotebook),
+    totalNotebooks: notebookCountsByResult.reduce((sum, count) => sum + count, 0),
     totalWords: results.reduce((sum, result) => sum + result.originalWordCount, 0),
     totalBytes: results.reduce((sum, result) => sum + result.originalSizeBytes, 0),
   };

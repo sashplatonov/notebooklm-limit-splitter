@@ -74,7 +74,8 @@ describe("buildNotebookPlan", () => {
     const plan = buildNotebookPlan(results, 2);
 
     expect(plan.totalChunks).toBe(4);
-    expect(plan.totalNotebooks).toBe(2);
+    expect(plan.totalNotebooks).toBe(3);
+    expect(plan.notebookCountsByResult).toEqual([1, 1, 1]);
     expect(plan.totalWords).toBe(650);
     expect(plan.totalBytes).toBe(6_500);
     expect(plan.sortedChunks.map((item) => item.chunk.fileName)).toEqual([
@@ -91,19 +92,19 @@ describe("buildNotebookPlan", () => {
     });
     expect(plan.chunkPlacements[0][0]).toMatchObject({
       notebookNumber: 1,
-      sortOrder: 1,
+      sortOrder: 0,
       startDate: "2024-05-03",
       endDate: "2024-05-03",
     });
     expect(plan.chunkPlacements[0][1]).toMatchObject({
-      notebookNumber: 2,
-      sortOrder: 2,
+      notebookNumber: 1,
+      sortOrder: 1,
       startDate: "2024-05-05",
       endDate: "2024-05-05",
     });
     expect(plan.chunkPlacements[2][0]).toMatchObject({
-      notebookNumber: 2,
-      sortOrder: 3,
+      notebookNumber: 1,
+      sortOrder: 0,
       startDate: null,
       endDate: null,
     });
@@ -125,6 +126,7 @@ describe("buildNotebookPlan", () => {
     const plan = buildNotebookPlan(results, 10);
 
     expect(plan.sortedChunks).toHaveLength(1);
+    expect(plan.notebookCountsByResult).toEqual([1]);
     expect(plan.sortedChunks[0]).toMatchObject({
       startDate: "2024-06-01",
       endDate: "2024-06-03",
@@ -142,10 +144,56 @@ describe("buildNotebookPlan", () => {
 
     expect(plan.totalChunks).toBe(0);
     expect(plan.totalNotebooks).toBe(0);
+    expect(plan.notebookCountsByResult).toEqual([]);
     expect(plan.totalWords).toBe(0);
     expect(plan.totalBytes).toBe(0);
     expect(plan.flatChunks).toEqual([]);
     expect(plan.sortedChunks).toEqual([]);
     expect(plan.chunkPlacements).toEqual([]);
+  });
+
+  it("resets notebook numbering for each separate split result", () => {
+    const results: SplitResult[] = [
+      createResult("alpha.txt", "alpha.txt", [
+        {
+          index: 0,
+          content: "alpha one",
+          wordCount: 2,
+          sizeBytes: 20,
+          fileName: "alpha_2024-05-01.txt",
+        },
+        {
+          index: 1,
+          content: "alpha two",
+          wordCount: 2,
+          sizeBytes: 20,
+          fileName: "alpha_2024-05-02.txt",
+        },
+      ]),
+      createResult("beta.txt", "beta.txt", [
+        {
+          index: 0,
+          content: "beta one",
+          wordCount: 2,
+          sizeBytes: 20,
+          fileName: "beta_2024-05-03.txt",
+        },
+        {
+          index: 1,
+          content: "beta two",
+          wordCount: 2,
+          sizeBytes: 20,
+          fileName: "beta_2024-05-04.txt",
+        },
+      ]),
+    ];
+
+    const plan = buildNotebookPlan(results, 3);
+
+    expect(plan.totalChunks).toBe(4);
+    expect(plan.totalNotebooks).toBe(2);
+    expect(plan.notebookCountsByResult).toEqual([1, 1]);
+    expect(plan.chunkPlacements[0].map((placement) => placement.notebookNumber)).toEqual([1, 1]);
+    expect(plan.chunkPlacements[1].map((placement) => placement.notebookNumber)).toEqual([1, 1]);
   });
 });

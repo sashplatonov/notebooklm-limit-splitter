@@ -26,14 +26,18 @@ function downloadArchiveForResults(
   notebookPlan: ReturnType<typeof buildNotebookPlan>,
   results: SplitResult[],
 ): void {
-  const entries = notebookPlan.sortedChunks.map((item) => {
-    const placement = notebookPlan.chunkPlacements[item.resultIndex][item.chunkIndex];
-    const result = results[item.resultIndex];
+  const entries = results.flatMap((result, resultIndex) => {
     const folderBase = result.normalizedName.replace(/\.[^/.]+$/, "");
-    return {
-      name: `notebook-${placement.notebookNumber}/${String(item.resultIndex + 1).padStart(2, "0")}_${folderBase}/${item.chunk.fileName}`,
-      content: item.chunk.content,
-    };
+    return result.chunks
+      .map((chunk, chunkIndex) => ({
+        chunk,
+        placement: notebookPlan.chunkPlacements[resultIndex][chunkIndex],
+      }))
+      .sort((left, right) => left.placement.sortOrder - right.placement.sortOrder)
+      .map(({ chunk, placement }) => ({
+        name: `${String(resultIndex + 1).padStart(2, "0")}_${folderBase}/notebook-${placement.notebookNumber}/${chunk.fileName}`,
+        content: chunk.content,
+      }));
   });
   downloadBlob(buildArchiveName(), createZipBlob(entries));
 }

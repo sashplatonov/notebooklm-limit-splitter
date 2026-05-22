@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ChunkPlacement, LastRunSummary } from "../app/types";
 import type { SplitLimits, SplitResult } from "../types";
 import ResultsSection from "./ResultsSection";
@@ -40,6 +40,10 @@ function createResult(
 }
 
 describe("ResultsSection", () => {
+  beforeEach(() => {
+    cleanup();
+  });
+
   it("shows the notebook hint, cards, and action buttons", () => {
     const onClearAll = vi.fn();
     const onDownloadArchive = vi.fn();
@@ -71,6 +75,7 @@ describe("ResultsSection", () => {
       <ResultsSection
         chunkPlacements={placements}
         limits={limits}
+        notebookCountsByResult={[1, 1]}
         onClearAll={onClearAll}
         onDownloadArchive={onDownloadArchive}
         onRemoveResult={onRemoveResult}
@@ -83,8 +88,11 @@ describe("ResultsSection", () => {
     );
 
     expect(screen.getByText("You will need 2 NotebookLM notebooks")).toBeTruthy();
-    expect(screen.getByText("Notebook 1: chunks 1-2")).toBeTruthy();
-    expect(screen.getByText("Notebook 2: chunks 3-3")).toBeTruthy();
+    expect(
+      screen.getByText(/Each split keeps its own limit of 2 sources per notebook/i),
+    ).toBeTruthy();
+    expect(screen.getByText("Split 1: 1 notebook")).toBeTruthy();
+    expect(screen.getByText("Split 2: 1 notebook")).toBeTruthy();
     expect(screen.getAllByTestId("result-card")).toHaveLength(2);
     expect(screen.getAllByText(/summary$/i)).toHaveLength(2);
 
@@ -94,5 +102,41 @@ describe("ResultsSection", () => {
     expect(onClearAll).toHaveBeenCalledTimes(1);
     expect(onDownloadArchive).toHaveBeenCalledTimes(1);
     expect(onRemoveResult).not.toHaveBeenCalled();
+  });
+
+  it("shows separate notebook counts per split result", () => {
+    const results = [
+      createResult("alpha.txt", ["alpha_2024-05-01.txt"]),
+      createResult("beta.txt", ["beta_2024-05-03.txt"]),
+    ];
+    const placements: ChunkPlacement[][] = [
+      [{ notebookNumber: 1, sortOrder: 0, startDate: "2024-05-01", endDate: "2024-05-01" }],
+      [{ notebookNumber: 1, sortOrder: 0, startDate: "2024-05-03", endDate: "2024-05-03" }],
+    ];
+    const limits: SplitLimits = {
+      maxWordsPerSource: 500_000,
+      maxFileSizeMB: 200,
+      maxSourcesPerNotebook: 50,
+    };
+
+    render(
+      <ResultsSection
+        chunkPlacements={placements}
+        limits={limits}
+        notebookCountsByResult={[1, 1]}
+        onClearAll={vi.fn()}
+        onDownloadArchive={vi.fn()}
+        onRemoveResult={vi.fn()}
+        results={results}
+        totalBytes={2_000}
+        totalChunks={2}
+        totalNotebooks={2}
+        totalWords={200}
+      />,
+    );
+
+    expect(screen.getByText("You will need 2 NotebookLM notebooks")).toBeTruthy();
+    expect(screen.getByText("Split 1: 1 notebook")).toBeTruthy();
+    expect(screen.getByText("Split 2: 1 notebook")).toBeTruthy();
   });
 });
