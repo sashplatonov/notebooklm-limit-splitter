@@ -1,1 +1,36 @@
+@import url("https://fonts.googleapis.com/css2?family=Archivo+Black&family=Manrope:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
+
+:root {
+  --color-canvas: #fffdf8;
+  --color-surface: #ffffff;
+  --color-brand: #f97316;
+  --color-accent: #14b8a6;
+  --color-highlight: #facc15;
+}
+
+@theme {
+  --font-display: "Archivo Black", sans-serif;
+  --font-sans: "Manrope", sans-serif;
+}
+
+html {
+  background: var(--color-canvas);
+}
+
+body {
+  min-width: 320px;
+  font-family: var(--font-sans);
+  color: #0f172a;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(249, 115, 22, 0.2);
+}

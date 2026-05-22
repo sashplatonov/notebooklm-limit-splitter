@@ -42,12 +42,14 @@ export default function DropZone({ onFiles }: Props) {
       onDragLeave={() => setDragOver(false)}
       onDrop={onDrop}
       onClick={() => inputRef.current?.click()}
-      className={`relative flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed px-8 py-14 cursor-pointer transition-all duration-200 select-none
+      className={`relative flex cursor-pointer select-none flex-col items-center justify-center gap-5 overflow-hidden rounded-[2rem] border-4 px-8 py-14 transition-all duration-200
         ${dragOver
-          ? "border-violet-400 bg-violet-50 scale-[1.01]"
-          : "border-slate-200 bg-slate-50 hover:border-violet-300 hover:bg-violet-50/40"
+          ? "border-[var(--color-accent)] bg-[#ecfeff] scale-[1.01]"
+          : "border-slate-950 bg-[color:var(--color-surface)] hover:-translate-y-0.5"
         }`}
     >
+      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-[2rem] bg-[var(--color-highlight)] opacity-50" />
+      <div className="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-[var(--color-brand)] opacity-10" />
       <input
         ref={inputRef}
         type="file"
@@ -60,12 +62,11 @@ export default function DropZone({ onFiles }: Props) {
         }}
       />
 
-      {/* Icon */}
-      <div className={`flex h-16 w-16 items-center justify-center rounded-2xl transition-colors duration-200
-        ${dragOver ? "bg-violet-100" : "bg-white border border-slate-200 shadow-sm"}`}
+      <div className={`relative z-10 flex h-20 w-20 items-center justify-center rounded-[1.75rem] border-4 border-slate-950 transition-colors duration-200
+        ${dragOver ? "bg-[var(--color-accent)]" : "bg-[var(--color-brand)]"}`}
       >
         <svg
-          className={`h-8 w-8 transition-colors duration-200 ${dragOver ? "text-violet-500" : "text-slate-400"}`}
+          className="h-9 w-9 text-white transition-colors duration-200"
           fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
         >
           <path strokeLinecap="round" strokeLinejoin="round"
@@ -74,26 +75,25 @@ export default function DropZone({ onFiles }: Props) {
         </svg>
       </div>
 
-      <div className="text-center space-y-1">
-        <p className={`text-base font-semibold transition-colors ${dragOver ? "text-violet-700" : "text-slate-600"}`}>
+      <div className="relative z-10 space-y-1 text-center">
+        <p className={`font-display text-2xl font-black uppercase tracking-[0.06em] transition-colors ${dragOver ? "text-slate-950" : "text-slate-900"}`}>
           {dragOver ? "Drop files here" : "Drag files here or click to browse"}
         </p>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-500">
           JSON, TXT, MD, CSV, YAML, XML, LOG → TXT / MD / CSV
         </p>
       </div>
 
-      {/* Badge */}
-      <div className="flex flex-wrap gap-2 justify-center">
+      <div className="relative z-10 flex flex-wrap justify-center gap-2">
         {[".json", ".txt", ".md", ".csv"].map((ext) => (
           <span
             key={ext}
-            className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-xs font-mono font-medium text-slate-500 shadow-sm"
+            className="rounded-full border-2 border-slate-950 bg-white px-3 py-1 text-xs font-mono font-semibold text-slate-700"
           >
             {ext}
           </span>
         ))}
-        <span className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-xs font-mono font-medium text-slate-400 shadow-sm">
+        <span className="rounded-full border-2 border-slate-950 bg-[#fff5e6] px-3 py-1 text-xs font-mono font-semibold text-slate-700">
           + text-like
         </span>
       </div>

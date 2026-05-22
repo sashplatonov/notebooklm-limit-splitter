@@ -53,7 +53,7 @@ function SettingField({
                 onChange(v);
               }
             }}
-            className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-right text-sm font-mono font-semibold text-slate-700 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+            className="w-28 rounded-xl border-2 border-slate-950 bg-white px-3 py-1.5 text-right text-sm font-mono font-semibold text-slate-700 focus:outline-none"
           />
           <span className="text-xs text-slate-400 w-8">{unit}</span>
         </div>
@@ -70,7 +70,7 @@ function SettingField({
           onChange={(e) => onChange(Number(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
           style={{
-            background: `linear-gradient(to right, #8b5cf6 0%, #8b5cf6 ${pct}%, #e2e8f0 ${pct}%, #e2e8f0 100%)`,
+            background: `linear-gradient(to right, #14b8a6 0%, #14b8a6 ${pct}%, #e2e8f0 ${pct}%, #e2e8f0 100%)`,
           }}
         />
       </div>
@@ -79,7 +79,7 @@ function SettingField({
         <span>{formatNumber(min)} {unit}</span>
         <button
           onClick={() => onChange(defaultValue)}
-          className="text-violet-500 hover:text-violet-700 font-medium transition-colors"
+          className="font-medium text-[var(--color-brand)] transition-colors hover:text-slate-950"
         >
           Reset ({formatNumber(defaultValue)})
         </button>
@@ -93,27 +93,26 @@ export default function SettingsPanel({ limits, onChange, open, onToggle }: Prop
   const resetAll = () => onChange({ ...DEFAULT_LIMITS });
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      {/* Header */}
+    <div className="overflow-hidden rounded-[2rem] border-4 border-slate-950 bg-[color:var(--color-surface)]">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
+        className="flex w-full items-center justify-between px-6 py-4 transition-colors hover:bg-[#fff8ef]"
       >
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50">
-            <svg className="h-4 w-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-[1rem] border-2 border-slate-950 bg-[#fff5e6]">
+            <svg className="h-4 w-4 text-slate-950" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </div>
-          <span className="font-semibold text-slate-700">Limit settings</span>
+          <span className="font-display text-lg font-black uppercase tracking-[0.08em] text-slate-950">Limit settings</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+          <span className="rounded-full border-2 border-slate-950 bg-[#ecfeff] px-2 py-1 text-xs text-slate-700">
             {formatNumber(limits.maxWordsPerSource)} words / source
           </span>
           <svg
-            className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
             fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -123,7 +122,7 @@ export default function SettingsPanel({ limits, onChange, open, onToggle }: Prop
 
       {/* Body */}
       {open && (
-        <div className="border-t border-slate-100 px-6 py-5 space-y-6">
+        <div className="space-y-6 border-t-2 border-slate-950/10 px-6 py-5">
           <div className="grid gap-6">
             <SettingField
               label="Max words per source"
@@ -136,7 +135,7 @@ export default function SettingsPanel({ limits, onChange, open, onToggle }: Prop
               onChange={(v) => onChange({ ...limits, maxWordsPerSource: v })}
               defaultValue={DEFAULT_LIMITS.maxWordsPerSource}
             />
-            <div className="border-t border-slate-100" />
+            <div className="border-t border-slate-950/10" />
             <SettingField
               label="Max file size"
               description="NotebookLM limit: 200 MB per file"
@@ -148,7 +147,7 @@ export default function SettingsPanel({ limits, onChange, open, onToggle }: Prop
               onChange={(v) => onChange({ ...limits, maxFileSizeMB: v })}
               defaultValue={DEFAULT_LIMITS.maxFileSizeMB}
             />
-            <div className="border-t border-slate-100" />
+            <div className="border-t border-slate-950/10" />
             <SettingField
               label="Max sources per notebook"
               description="NotebookLM limit: 50 sources per notebook"
@@ -168,7 +167,7 @@ export default function SettingsPanel({ limits, onChange, open, onToggle }: Prop
             </div>
             <button
               onClick={resetAll}
-              className="text-xs text-violet-600 hover:text-violet-800 font-semibold transition-colors flex items-center gap-1"
+              className="flex items-center gap-1 text-xs font-semibold text-[var(--color-brand)] transition-colors hover:text-slate-950"
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
