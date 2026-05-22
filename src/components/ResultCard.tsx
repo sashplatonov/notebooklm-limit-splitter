@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { formatDateTime, formatDuration } from "../app/formatting";
-import type { LastRunSummary } from "../app/types";
 import { SplitResult } from "../types";
 import { formatBytes, formatNumber } from "../utils/splitter";
 import { createZipBlob, downloadBlob } from "../utils/zip";
@@ -14,7 +13,6 @@ interface ChunkPlacement {
 }
 
 interface Props {
-  lastRunSummary: LastRunSummary | null;
   maxSourcesPerNotebook: number;
   result: SplitResult;
   placements: ChunkPlacement[];
@@ -62,12 +60,10 @@ function downloadZip(result: SplitResult, placements: ChunkPlacement[]) {
 }
 
 function ResultHeader({
-  lastRunSummary,
   needsSplit,
   onRemove,
   result,
 }: {
-  lastRunSummary: LastRunSummary | null;
   needsSplit: boolean;
   onRemove: () => void;
   result: SplitResult;
@@ -99,18 +95,14 @@ function ResultHeader({
               </>
             )}
           </div>
-          {lastRunSummary && (
+          {result.importSummary && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
               <span className="rounded-full bg-[#fff4e8] px-2 py-1 font-semibold text-orange-700">Last import summary</span>
               <span className="text-slate-500">
-                {formatDateTime(lastRunSummary.startedAt)} → {formatDateTime(lastRunSummary.finishedAt)}
+                {formatDateTime(result.importSummary.startedAt)} → {formatDateTime(result.importSummary.finishedAt)}
               </span>
               <span className="text-slate-400">·</span>
-              <span className="text-slate-600">{formatDuration(lastRunSummary.durationMs)}</span>
-              <span className="text-slate-400">·</span>
-              <span className="text-slate-600">
-                {lastRunSummary.filesProcessed} file{lastRunSummary.filesProcessed !== 1 ? "s" : ""} in batch
-              </span>
+              <span className="text-slate-600">{formatDuration(result.importSummary.durationMs)}</span>
             </div>
           )}
         </div>
@@ -168,7 +160,7 @@ function ResultStats({
   );
 }
 
-export default function ResultCard({ lastRunSummary, maxSourcesPerNotebook, result, placements, onRemove }: Props) {
+export default function ResultCard({ maxSourcesPerNotebook, result, placements, onRemove }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const needsSplit = result.chunks.length > 1;
@@ -180,7 +172,7 @@ export default function ResultCard({ lastRunSummary, maxSourcesPerNotebook, resu
 
   return (
     <div className="overflow-hidden rounded-[1.4rem] border-2 border-slate-950 bg-[color:var(--color-surface)] shadow-[7px_7px_0_0_rgba(15,23,42,0.08)]">
-      <ResultHeader lastRunSummary={lastRunSummary} needsSplit={needsSplit} onRemove={onRemove} result={result} />
+      <ResultHeader needsSplit={needsSplit} onRemove={onRemove} result={result} />
       {needsSplit && (
         <ResultStats
           chunkCount={result.chunks.length}

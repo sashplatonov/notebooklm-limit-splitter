@@ -140,6 +140,7 @@ export async function processFilesForNotebookLm({
 
   for (const [index, item] of items.entries()) {
     const { fileName, queueId } = item;
+    const fileStartedAt = new Date().toISOString();
     emitQueueProgress(onProgress, {
       itemCount: items.length,
       completedFiles: index,
@@ -158,7 +159,10 @@ export async function processFilesForNotebookLm({
         onProgress,
         signal,
       });
-      results.push(result);
+      results.push({
+        ...result,
+        importSummary: createSummary(fileStartedAt, 1),
+      });
       completedQueueIds.push(queueId);
     } catch (error) {
       if (error instanceof ProcessingAbortedError) {

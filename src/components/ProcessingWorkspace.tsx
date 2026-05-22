@@ -1,5 +1,5 @@
 import type { BrowserNotificationPermission } from "../app/browserNotifications";
-import type { LastRunSummary, NotebookPlan, ProcessingProgress, QueuedImportItem } from "../app/types";
+import type { NotebookPlan, ProcessingProgress, QueuedImportItem } from "../app/types";
 import type { SplitLimits, SplitResult } from "../types";
 import DropZone from "./DropZone";
 import EmptyState from "./EmptyState";
@@ -12,7 +12,6 @@ import SettingsPanel from "./SettingsPanel";
 interface Props {
   errorMessage: string | null;
   handleFiles: (files: File[]) => Promise<void>;
-  lastRunSummary: LastRunSummary | null;
   limits: SplitLimits;
   notificationPermission: BrowserNotificationPermission;
   notificationsEnabled: boolean;
@@ -41,7 +40,6 @@ export default function ProcessingWorkspace(props: Props) {
   const {
     errorMessage,
     handleFiles,
-    lastRunSummary,
     limits,
     notificationPermission,
     notificationsEnabled,
@@ -93,7 +91,6 @@ export default function ProcessingWorkspace(props: Props) {
           {results.length > 0 && (
             <ResultsSection
               chunkPlacements={notebookPlan.chunkPlacements}
-              lastRunSummary={lastRunSummary}
               limits={limits}
               onClearAll={onClearAll}
               onDownloadArchive={onDownloadArchive}

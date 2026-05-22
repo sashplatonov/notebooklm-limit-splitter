@@ -11,17 +11,10 @@ vi.mock("../utils/splitter", () => ({
 
 vi.mock("./ResultCard", () => ({
   default: ({
-    lastRunSummary,
     result,
   }: {
-    lastRunSummary: LastRunSummary | null;
     result: SplitResult;
-  }) => (
-    <article data-testid="result-card">
-      {result.originalName}
-      {lastRunSummary ? " summary" : ""}
-    </article>
-  ),
+  }) => <article data-testid="result-card">{result.originalName}{result.importSummary ? " summary" : ""}</article>,
 }));
 
 function createResult(
@@ -51,9 +44,15 @@ describe("ResultsSection", () => {
     const onClearAll = vi.fn();
     const onDownloadArchive = vi.fn();
     const onRemoveResult = vi.fn();
+    const summary: LastRunSummary = {
+      startedAt: "2026-05-22T10:00:00.000Z",
+      finishedAt: "2026-05-22T10:05:00.000Z",
+      durationMs: 300_000,
+      filesProcessed: 1,
+    };
     const results = [
-      createResult("alpha.txt", ["alpha_2024-05-01.txt", "alpha_2024-05-02.txt"]),
-      createResult("beta.txt", ["beta_2024-05-03.txt"]),
+      { ...createResult("alpha.txt", ["alpha_2024-05-01.txt", "alpha_2024-05-02.txt"]), importSummary: summary },
+      { ...createResult("beta.txt", ["beta_2024-05-03.txt"]), importSummary: summary },
     ];
     const placements: ChunkPlacement[][] = [
       [
@@ -62,12 +61,6 @@ describe("ResultsSection", () => {
       ],
       [{ notebookNumber: 2, sortOrder: 2, startDate: "2024-05-03", endDate: "2024-05-03" }],
     ];
-    const summary: LastRunSummary = {
-      startedAt: "2026-05-22T10:00:00.000Z",
-      finishedAt: "2026-05-22T10:05:00.000Z",
-      durationMs: 300_000,
-      filesProcessed: 2,
-    };
     const limits: SplitLimits = {
       maxWordsPerSource: 500_000,
       maxFileSizeMB: 200,
@@ -77,7 +70,6 @@ describe("ResultsSection", () => {
     render(
       <ResultsSection
         chunkPlacements={placements}
-        lastRunSummary={summary}
         limits={limits}
         onClearAll={onClearAll}
         onDownloadArchive={onDownloadArchive}

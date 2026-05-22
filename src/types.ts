@@ -22,6 +22,13 @@ export interface SplitChunk {
   endDate?: string | null;
 }
 
+export interface ImportSummary {
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  filesProcessed: number;
+}
+
 export interface SplitResult {
   originalName: string;
   normalizedName: string;
@@ -30,4 +37,5 @@ export interface SplitResult {
   originalWordCount: number;
   originalSizeBytes: number;
   chunks: SplitChunk[];
+  importSummary?: ImportSummary;
 }

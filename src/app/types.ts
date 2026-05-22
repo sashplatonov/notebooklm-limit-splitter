@@ -1,4 +1,4 @@
-import type { SplitChunk, SplitResult } from "../types";
+import type { ImportSummary, SplitChunk, SplitResult } from "../types";
 import type { JsonFieldOption } from "../utils/jsonFields";
 
 export interface ChunkPlacement {
@@ -24,12 +24,7 @@ export interface ProcessingProgress {
   currentStage: string | null;
 }
 
-export interface LastRunSummary {
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  filesProcessed: number;
-}
+export type LastRunSummary = ImportSummary;
 
 export interface ProcessingStats {
   dayKey: string;

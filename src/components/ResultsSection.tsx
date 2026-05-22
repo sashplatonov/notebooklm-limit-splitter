@@ -1,11 +1,10 @@
-import type { ChunkPlacement, LastRunSummary } from "../app/types";
+import type { ChunkPlacement } from "../app/types";
 import type { SplitLimits, SplitResult } from "../types";
 import { formatBytes, formatNumber } from "../utils/splitter";
 import ResultCard from "./ResultCard";
 
 interface ResultsSectionProps {
   chunkPlacements: ChunkPlacement[][];
-  lastRunSummary: LastRunSummary | null;
   limits: SplitLimits;
   onClearAll: () => void;
   onDownloadArchive: () => void;
@@ -60,7 +59,6 @@ function NotebookPlanHint({
 
 export default function ResultsSection({
   chunkPlacements,
-  lastRunSummary,
   limits,
   onClearAll,
   onDownloadArchive,
@@ -113,7 +111,6 @@ export default function ResultsSection({
         {results.map((result, index) => (
           <ResultCard
             key={`${result.originalName}-${index}`}
-            lastRunSummary={lastRunSummary}
             maxSourcesPerNotebook={limits.maxSourcesPerNotebook}
             result={result}
             placements={chunkPlacements[index]}

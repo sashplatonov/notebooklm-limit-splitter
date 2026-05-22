@@ -43,10 +43,15 @@ describe("ResultCard", () => {
         fileName: "source.txt",
       },
     ]);
+    result.importSummary = {
+      startedAt: "2026-05-22T10:00:00.000Z",
+      finishedAt: "2026-05-22T10:00:01.000Z",
+      durationMs: 1_000,
+      filesProcessed: 1,
+    };
 
     const { container } = render(
       <ResultCard
-        lastRunSummary={null}
         maxSourcesPerNotebook={defaultProps.maxSourcesPerNotebook}
         result={result}
         placements={[{ notebookNumber: 1, sortOrder: 0, startDate: null, endDate: null }]}
@@ -94,7 +99,6 @@ describe("ResultCard", () => {
 
     render(
       <ResultCard
-        lastRunSummary={null}
         maxSourcesPerNotebook={defaultProps.maxSourcesPerNotebook}
         result={result}
         placements={[
@@ -148,7 +152,6 @@ describe("ResultCard", () => {
 
     render(
       <ResultCard
-        lastRunSummary={null}
         maxSourcesPerNotebook={50}
         result={result}
         placements={result.chunks.map((_, index) => ({

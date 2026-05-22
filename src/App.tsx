@@ -134,7 +134,6 @@ export default function App() {
         <ProcessingWorkspace
           errorMessage={processing.errorMessage}
           handleFiles={queue.addFiles}
-          lastRunSummary={lastRunSummary}
           limits={limits}
           notificationPermission={notificationPermission}
           notificationsEnabled={notificationsEnabled}
