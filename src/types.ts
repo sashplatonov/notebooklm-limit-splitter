@@ -1,3 +1,5 @@
+import type { JsonFieldOption } from "./utils/jsonFields";
+
 export interface SplitLimits {
   maxWordsPerSource: number;
   maxFileSizeMB: number;
@@ -29,11 +31,61 @@ export interface ImportSummary {
   filesProcessed: number;
 }
 
+export interface ProcessingStats {
+  dayKey: string;
+  todayProcessed: number;
+  totalProcessed: number;
+}
+
 export interface QueuedImportIssue {
   queueId: string;
   fileName: string;
   fileSizeBytes: number;
   reason: string;
+}
+
+export interface ProcessingProgress {
+  totalFiles: number;
+  completedFiles: number;
+  currentFileName: string | null;
+  currentFilePercent: number;
+  currentStage: string | null;
+}
+
+export type LastRunSummary = ImportSummary;
+
+export interface ChunkPlacement {
+  notebookNumber: number;
+  sortOrder: number;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface PlannedChunk {
+  resultIndex: number;
+  chunkIndex: number;
+  chunk: SplitChunk;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface NotebookPlan {
+  flatChunks: PlannedChunk[];
+  sortedChunks: PlannedChunk[];
+  chunkPlacements: ChunkPlacement[][];
+  notebookCountsByResult: number[];
+  totalChunks: number;
+  totalNotebooks: number;
+  totalWords: number;
+  totalBytes: number;
+}
+
+export interface QueuedImportItem {
+  queueId: string;
+  file: File;
+  fileName: string;
+  selectedJsonFields: string[];
+  fieldOptions: JsonFieldOption[];
 }
 
 export interface SplitResult {
@@ -45,4 +97,12 @@ export interface SplitResult {
   originalSizeBytes: number;
   chunks: SplitChunk[];
   importSummary?: ImportSummary;
+}
+
+export interface ProcessedFileBatch {
+  results: SplitResult[];
+  errors: string[];
+  summary: LastRunSummary;
+  canceled: boolean;
+  completedQueueIds: string[];
 }

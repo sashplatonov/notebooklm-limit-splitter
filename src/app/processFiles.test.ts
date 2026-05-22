@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { processFilesForNotebookLm } from "./processFiles";
 import type { QueuedImportItem, SplitLimits } from "./types";
+import { ProcessingAbortedError } from "../utils/splitter/shared";
 
 // Mock dependencies
 vi.mock("../utils/filePipeline", () => ({
@@ -9,6 +10,10 @@ vi.mock("../utils/filePipeline", () => ({
 
 vi.mock("../utils/splitter", () => ({
   splitFile: vi.fn(),
+}));
+
+vi.mock("../utils/splitter/text", () => ({
+  splitTextSegments: vi.fn(),
 }));
 
 vi.mock("./formatting", () => ({
@@ -22,9 +27,11 @@ vi.mock("./formatting", () => ({
 
 import { prepareFileForNotebookLm } from "../utils/filePipeline";
 import { splitFile } from "../utils/splitter";
+import { splitTextSegments } from "../utils/splitter/text";
 
 const mockPrepareFile = prepareFileForNotebookLm as ReturnType<typeof vi.fn>;
 const mockSplitFile = splitFile as ReturnType<typeof vi.fn>;
+const mockSplitTextSegments = splitTextSegments as ReturnType<typeof vi.fn>;
 
 function createMockFile(content: string, name: string): File {
   return new File([content], name, { type: "text/plain" });
@@ -115,15 +122,15 @@ describe("processFiles", () => {
         sourceKind: "text",
       });
 
-      mockSplitFile.mockResolvedValue({
-        originalName: "2 files combined",
-        normalizedName: "file1_combined_2_files.txt",
-        outputFormat: "txt",
-        fileType: "text",
-        originalWordCount: 8,
-        originalSizeBytes: 64,
-        chunks: [],
-      });
+      mockSplitTextSegments.mockResolvedValue([
+        {
+          index: 0,
+          content: "=== FILE: file1.txt ===\ncontent 1\n\n=== FILE: file2.txt ===\ncontent 2",
+          wordCount: 8,
+          sizeBytes: 64,
+          fileName: "file1_combined_2_files_0001.txt",
+        },
+      ]);
 
       const items: QueuedImportItem[] = [
         { queueId: "q1", file: file1, fileName: "file1.txt", selectedJsonFields: [], fieldOptions: [] },
@@ -140,10 +147,60 @@ describe("processFiles", () => {
       expect(result.results).toHaveLength(1);
       expect(result.completedQueueIds).toEqual(["q1", "q2"]);
       expect(mockSplitFile).not.toHaveBeenCalled();
+      expect(mockSplitTextSegments).toHaveBeenCalledTimes(1);
+      expect(mockSplitTextSegments.mock.calls[0][0]).toEqual([
+        "=== FILE: file1.txt ===\n",
+        "content 1",
+        "\n\n=== FILE: file2.txt ===\n",
+        "content 2",
+      ]);
       expect(result.results[0].originalName).toBe("2 files combined");
       expect(result.results[0].normalizedName).toBe("file1_combined_2_files.txt");
       expect(result.results[0].chunks[0].content).toContain("=== FILE: file1.txt ===");
       expect(result.results[0].chunks[0].content).toContain("=== FILE: file2.txt ===");
+    });
+
+    it("stops before combined splitting when the operation is aborted", async () => {
+      const file1 = createMockFile("content 1", "file1.txt");
+      const file2 = createMockFile("content 2", "file2.txt");
+      const controller = new AbortController();
+
+      mockPrepareFile
+        .mockResolvedValueOnce({
+          originalName: "file1.txt",
+          normalizedName: "file1.txt",
+          outputFormat: "txt",
+          content: "content 1",
+          sourceKind: "text",
+        })
+        .mockResolvedValueOnce({
+          originalName: "file2.txt",
+          normalizedName: "file2.txt",
+          outputFormat: "txt",
+          content: "content 2",
+          sourceKind: "text",
+        });
+
+      mockSplitTextSegments.mockImplementation(async () => {
+        throw new ProcessingAbortedError();
+      });
+
+      const items: QueuedImportItem[] = [
+        { queueId: "q1", file: file1, fileName: "file1.txt", selectedJsonFields: [], fieldOptions: [] },
+        { queueId: "q2", file: file2, fileName: "file2.txt", selectedJsonFields: [], fieldOptions: [] },
+      ];
+
+      const result = await processFilesForNotebookLm({
+        items,
+        limits: defaultLimits,
+        onProgress: vi.fn(),
+        signal: controller.signal,
+      });
+
+      expect(result.canceled).toBe(true);
+      expect(result.results).toHaveLength(0);
+      expect(result.errors).toHaveLength(0);
+      expect(mockSplitTextSegments).toHaveBeenCalledTimes(1);
     });
 
     it("aggregates errors from failed files", async () => {

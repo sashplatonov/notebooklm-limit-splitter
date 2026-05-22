@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { createZipBlob } from "./zip";
+import { describe, it, expect, vi } from "vitest";
+import { createZipBlob, downloadBlob } from "./zip";
 
 describe("zip", () => {
   describe("createZipBlob", () => {
@@ -47,6 +47,37 @@ describe("zip", () => {
       const blob1 = createZipBlob(entries);
       const blob2 = createZipBlob(entries);
       expect(blob1.size).toBe(blob2.size);
+    });
+  });
+
+  describe("downloadBlob", () => {
+    it("revokes the object URL even if clicking fails", () => {
+      const click = (): void => {
+        throw new Error("click failed");
+      };
+      const anchor = {
+        click,
+        download: "",
+        href: "",
+      } as unknown as HTMLAnchorElement;
+      const createElementSpy = vi.spyOn(document, "createElement").mockImplementation(() => anchor);
+      const createObjectURLSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:mock-url");
+      const revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+      try {
+        downloadBlob("archive.zip", new Blob(["data"]));
+        throw new Error("expected downloadBlob to throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe("click failed");
+      }
+
+      expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:mock-url");
+
+      createElementSpy.mockRestore();
+      createObjectURLSpy.mockRestore();
+      revokeObjectURLSpy.mockRestore();
     });
   });
 });

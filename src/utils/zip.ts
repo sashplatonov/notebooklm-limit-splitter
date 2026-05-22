@@ -113,9 +113,12 @@ export function createZipBlob(entries: ZipEntry[]): Blob {
 
 export function downloadBlob(fileName: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }

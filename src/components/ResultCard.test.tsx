@@ -50,7 +50,7 @@ describe("ResultCard", () => {
       filesProcessed: 1,
     };
 
-    const { container } = render(
+    render(
       <ResultCard
         maxSourcesPerNotebook={defaultProps.maxSourcesPerNotebook}
         result={result}
@@ -59,23 +59,14 @@ describe("ResultCard", () => {
       />,
     );
 
-    const anchor = {
-      click: vi.fn(),
-      download: "",
-      href: "",
-    } as unknown as HTMLAnchorElement;
-    const createElementSpy = vi.spyOn(document, "createElement").mockReturnValue(anchor);
-
     fireEvent.click(screen.getByRole("button", { name: /^download$/i }));
-    fireEvent.click(container.querySelectorAll("button")[0]!);
+    fireEvent.click(screen.getAllByRole("button")[0]);
 
-    expect(createElementSpy).toHaveBeenCalledWith("a");
-    expect(anchor.click).toHaveBeenCalledTimes(1);
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+    expect(downloadBlob).toHaveBeenCalledWith(
+      "source.txt",
+      expect.any(Blob),
+    );
     expect(onRemove).toHaveBeenCalledTimes(1);
-
-    createElementSpy.mockRestore();
   });
 
   it("exports split files as ZIP and schedules chunk downloads", async () => {
@@ -109,19 +100,10 @@ describe("ResultCard", () => {
       />,
     );
 
-    const anchor = {
-      click: vi.fn(),
-      download: "",
-      href: "",
-    } as unknown as HTMLAnchorElement;
-    const createElementSpy = vi.spyOn(document, "createElement").mockReturnValue(anchor);
-
     fireEvent.click(screen.getByRole("button", { name: /download all \(2\)/i }));
     await vi.runAllTimersAsync();
-
-    expect(anchor.click).toHaveBeenCalledTimes(2);
-    expect(createElementSpy).toHaveBeenCalledTimes(2);
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+    expect(downloadBlob).toHaveBeenNthCalledWith(1, "source_2024-05-02.txt", expect.any(Blob));
+    expect(downloadBlob).toHaveBeenNthCalledWith(2, "source_2024-05-01.txt", expect.any(Blob));
 
     fireEvent.click(screen.getAllByRole("button", { name: /download zip/i })[0]);
     expect(createZipBlob).toHaveBeenCalledWith([
@@ -135,8 +117,6 @@ describe("ResultCard", () => {
       },
     ]);
     expect(downloadBlob).toHaveBeenCalledWith("source.zip", expect.any(Blob));
-
-    createElementSpy.mockRestore();
   });
 
   it("uses per-split notebook numbering in ZIP exports and summary text", () => {
