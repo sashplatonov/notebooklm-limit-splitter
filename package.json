@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "clsx": "2.1.1",
@@ -17,13 +20,16 @@
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {
+    "@eslint/js": "9.39.1",
     "@rolldown/plugin-babel": "0.2.3",
     "@tailwindcss/vite": "4.3.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "25.9.1",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
-    "@eslint/js": "9.39.1",
+    "@vitest/coverage-v8": "^4.1.7",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "9.39.1",
     "eslint-plugin-import": "2.32.0",
@@ -32,10 +38,12 @@
     "eslint-plugin-sonarjs": "3.0.5",
     "eslint-plugin-unicorn": "62.0.0",
     "globals": "16.5.0",
+    "jsdom": "^29.1.1",
     "tailwindcss": "4.3.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.46.4",
     "vite": "8.0.14",
-    "vite-plugin-singlefile": "2.3.3"
+    "vite-plugin-singlefile": "2.3.3",
+    "vitest": "^4.1.7"
   }
 }
