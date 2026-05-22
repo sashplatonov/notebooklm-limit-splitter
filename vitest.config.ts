@@ -8,8 +8,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
-      // Sprint 1: cover utils folder only (app folder is Sprint 2)
-      include: ["src/utils/**"],
+      include: ["src/utils/**", "src/app/**"],
       exclude: ["src/test/**"],
       thresholds: {
         branches: 80,
