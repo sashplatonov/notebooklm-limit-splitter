@@ -26,18 +26,36 @@ interface JsonSplitArgs {
   signal?: AbortSignal;
 }
 
-function collectLeaves(value: unknown): string[] {
+interface JsonLeafEntry {
+  content: string;
+  wordCount: number;
+  byteCount: number;
+}
+
+function collectLeaves(value: unknown): JsonLeafEntry[] {
   if (Array.isArray(value)) {
     return value.flatMap((item) => collectLeaves(item));
   }
 
   if (typeof value === "object" && value !== null) {
     return Object.entries(value as Record<string, unknown>).map(([key, itemValue]) => {
-      return JSON.stringify({ [key]: itemValue });
+      const content = JSON.stringify({ [key]: itemValue });
+      return {
+        content,
+        wordCount: countWords(content),
+        byteCount: byteLen(content),
+      };
     });
   }
 
-  return [JSON.stringify(value)];
+  const content = JSON.stringify(value);
+  return [
+    {
+      content,
+      wordCount: countWords(content),
+      byteCount: byteLen(content),
+    },
+  ];
 }
 
 function createSplitOptions(fileName: string, limits: SplitLimits, creationTimestamp: string): SplitTextOptions {
@@ -51,7 +69,7 @@ function createSplitOptions(fileName: string, limits: SplitLimits, creationTimes
 }
 
 async function splitOversizedEntry(
-  entry: string,
+  entry: JsonLeafEntry,
   entryIndex: number,
   entryCount: number,
   options: SplitTextOptions
@@ -63,37 +81,29 @@ async function splitOversizedEntry(
     });
   };
 
-  return splitText(entry, {
+  return splitText(entry.content, {
     ...options,
     onProgress: progressCallback,
   });
 }
 
-function renderJsonBucket(bucket: string[]): string {
+function renderJsonBucket(bucket: JsonLeafEntry[]): string {
   if (bucket.length === 1) {
     try {
-      return JSON.stringify(JSON.parse(bucket[0]), null, 2);
+      return JSON.stringify(JSON.parse(bucket[0].content), null, 2);
     } catch {
-      return bucket[0];
+      return bucket[0].content;
     }
   }
 
-  try {
-    const parsedEntries = bucket.map((item) => {
-      const parsedEntry: unknown = JSON.parse(item);
-      return parsedEntry;
-    });
-    return JSON.stringify(parsedEntries, null, 2);
-  } catch {
-    return `[\n${bucket.join(",\n")}\n]`;
-  }
+  return `[\n${bucket.map((item) => item.content).join(",\n")}\n]`;
 }
 
-async function packIntoChunks(entries: string[], options: SplitTextOptions): Promise<SplitChunk[]> {
+async function packIntoChunks(entries: JsonLeafEntry[], options: SplitTextOptions): Promise<SplitChunk[]> {
   const chunks: SplitChunk[] = [];
   const arrayOverheadBytes = 4;
   const separatorBytes = 2;
-  let bucket: string[] = [];
+  let bucket: JsonLeafEntry[] = [];
   let bucketWords = 0;
   let bucketBytes = arrayOverheadBytes;
 
@@ -111,8 +121,8 @@ async function packIntoChunks(entries: string[], options: SplitTextOptions): Pro
   for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
     throwIfAborted(options.signal);
     const entry = entries[entryIndex];
-    const entryWords = countWords(entry);
-    const entryBytes = byteLen(entry);
+    const entryWords = entry.wordCount;
+    const entryBytes = entry.byteCount;
 
     if (entryWords > options.maxWords || entryBytes > options.maxBytes) {
       flush();
@@ -183,7 +193,7 @@ export async function splitJson({
   await emitProgress(onProgress, 20, "Analyzing JSON structure", signal);
   const leaves = collectLeaves(parsed);
   if (leaves.length === 1) {
-    return splitText(leaves[0], options);
+    return splitText(leaves[0].content, options);
   }
 
   await emitProgress(onProgress, 35, "Packing JSON content", signal);

@@ -61,6 +61,17 @@ describe("splitter/text", () => {
       expect(onProgress).toHaveBeenCalled();
     });
 
+    it("handles large text inputs without changing chunk limits", async () => {
+      const text = "word ".repeat(12000).trim();
+      const options = createOptions({ maxWords: 250, maxBytes: 5000 });
+      const chunks = await splitText(text, options);
+      expect(chunks.length).toBeGreaterThan(1);
+      chunks.forEach((chunk) => {
+        expect(chunk.wordCount).toBeLessThanOrEqual(250);
+        expect(chunk.sizeBytes).toBeLessThanOrEqual(5000);
+      });
+    });
+
     it("throws ProcessingAbortedError when signal is aborted", async () => {
       const controller = new AbortController();
       controller.abort();

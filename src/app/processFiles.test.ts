@@ -139,17 +139,11 @@ describe("processFiles", () => {
 
       expect(result.results).toHaveLength(1);
       expect(result.completedQueueIds).toEqual(["q1", "q2"]);
-      expect(mockSplitFile).toHaveBeenCalledTimes(1);
-      expect(mockSplitFile).toHaveBeenCalledWith(
-        "=== FILE: file1.txt ===\ncontent 1\n\n=== FILE: file2.txt ===\ncontent 2",
-        "file1_combined_2_files.txt",
-        defaultLimits,
-        expect.objectContaining({
-          originalName: "2 files combined",
-          outputFormat: "txt",
-          fileType: "text",
-        }),
-      );
+      expect(mockSplitFile).not.toHaveBeenCalled();
+      expect(result.results[0].originalName).toBe("2 files combined");
+      expect(result.results[0].normalizedName).toBe("file1_combined_2_files.txt");
+      expect(result.results[0].chunks[0].content).toContain("=== FILE: file1.txt ===");
+      expect(result.results[0].chunks[0].content).toContain("=== FILE: file2.txt ===");
     });
 
     it("aggregates errors from failed files", async () => {

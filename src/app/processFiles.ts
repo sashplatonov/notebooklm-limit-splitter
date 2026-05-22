@@ -1,7 +1,15 @@
-import type { SplitLimits } from "../types";
+import type { SplitLimits, SplitResult } from "../types";
 import { prepareFileForNotebookLm, type PreparedFile } from "../utils/filePipeline";
 import { splitFile } from "../utils/splitter";
-import { ProcessingAbortedError, throwIfAborted, yieldToProcessingTask } from "../utils/splitter/shared";
+import {
+  ProcessingAbortedError,
+  buildCreationTimestamp,
+  byteLen,
+  countWords,
+  throwIfAborted,
+  yieldToProcessingTask,
+} from "../utils/splitter/shared";
+import { splitTextSegments } from "../utils/splitter/text";
 import { createSummary } from "./formatting";
 import type { ProcessedFileBatch, ProcessingProgress, QueuedImportItem } from "./types";
 
@@ -95,10 +103,25 @@ function buildCombinedBaseName(items: QueuedImportItem[]): string {
   return `${firstBaseName}_combined_${items.length}_files`;
 }
 
-function joinPreparedContents(preparedItems: PreparedBatchItem[]): string {
-  return preparedItems
-    .map(({ item, prepared }) => `=== FILE: ${item.fileName} ===\n${prepared.content.trim()}`)
-    .join("\n\n");
+function buildCombinedSegments(preparedItems: PreparedBatchItem[]): string[] {
+  return preparedItems.flatMap(({ item, prepared }, index) => {
+    const separator = `=== FILE: ${item.fileName} ===\n`;
+    if (index === 0) {
+      return [separator, prepared.content];
+    }
+
+    return [`\n\n${separator}`, prepared.content];
+  });
+}
+
+function summarizeSegments(segments: string[]): { wordCount: number; sizeBytes: number } {
+  return segments.reduce(
+    (summary, segment) => ({
+      wordCount: summary.wordCount + countWords(segment),
+      sizeBytes: summary.sizeBytes + byteLen(segment),
+    }),
+    { wordCount: 0, sizeBytes: 0 },
+  );
 }
 
 async function processCombinedItems({
@@ -113,14 +136,31 @@ async function processCombinedItems({
   limits: SplitLimits;
   onProgress: (progress: ProcessingProgress) => void;
   signal?: AbortSignal;
-}) {
+}): Promise<SplitResult> {
   const isSingleFile = preparedItems.length === 1;
   const combinedBaseName = buildCombinedBaseName(preparedItems.map(({ item }) => item));
-  const combinedContent = isSingleFile ? preparedItems[0].prepared.content : joinPreparedContents(preparedItems);
   const combinedFileName = isSingleFile ? preparedItems[0].prepared.normalizedName : `${combinedBaseName}.txt`;
   const originalName = isSingleFile ? preparedItems[0].prepared.originalName : `${preparedItems.length} files combined`;
   const outputFormat = isSingleFile ? preparedItems[0].prepared.outputFormat : "txt";
   const fileType = isSingleFile ? preparedItems[0].prepared.sourceKind : "text";
+
+  if (isSingleFile) {
+    return splitFile(preparedItems[0].prepared.content, combinedFileName, limits, {
+      originalName,
+      outputFormat,
+      fileType,
+      signal,
+      onProgress: (info) => {
+        emitQueueProgress(onProgress, {
+          itemCount,
+          completedFiles: 1,
+          currentFileName: combinedFileName,
+          currentFilePercent: info.percent,
+          currentStage: info.stage,
+        });
+      },
+    });
+  }
 
   emitQueueProgress(onProgress, {
     itemCount,
@@ -131,10 +171,14 @@ async function processCombinedItems({
   });
   await yieldToProcessingTask(signal);
 
-  return splitFile(combinedContent, combinedFileName, limits, {
-    originalName,
-    outputFormat,
-    fileType,
+  const combinedSegments = buildCombinedSegments(preparedItems);
+  const combinedStats = summarizeSegments(combinedSegments);
+  const chunks = await splitTextSegments(combinedSegments, {
+    baseName: combinedBaseName,
+    ext: ".txt",
+    creationTimestamp: buildCreationTimestamp(new Date()),
+    maxWords: limits.maxWordsPerSource,
+    maxBytes: limits.maxFileSizeMB * 1024 * 1024,
     signal,
     onProgress: (info) => {
       emitQueueProgress(onProgress, {
@@ -146,6 +190,16 @@ async function processCombinedItems({
       });
     },
   });
+
+  return {
+    originalName,
+    normalizedName: combinedFileName,
+    outputFormat,
+    fileType,
+    originalWordCount: combinedStats.wordCount,
+    originalSizeBytes: combinedStats.sizeBytes,
+    chunks,
+  };
 }
 
 export async function processFilesForNotebookLm({

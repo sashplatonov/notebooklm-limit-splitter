@@ -8,59 +8,112 @@ import {
   type SplitTextOptions,
 } from "./shared";
 
-function pushChunk(
+function createCharIterator(value: string): IterableIterator<string> {
+  return (function* iterateCharacters() {
+    for (let index = 0; index < value.length; ) {
+      const codePoint = value.codePointAt(index);
+      if (codePoint === undefined) {
+        break;
+      }
+
+      const char = String.fromCodePoint(codePoint);
+      yield char;
+      index += char.length;
+    }
+  })();
+}
+
+function flushChunk(
   chunks: SplitChunk[],
-  tokens: string[],
-  range: { start: number; end: number },
-  options: SplitTextOptions
+  chunkParts: string[],
+  options: SplitTextOptions,
 ): void {
-  const content = tokens.slice(range.start, range.end).join("").trim();
+  const content = chunkParts.join("").trim();
   if (content) {
     chunks.push(makeChunk(content, chunks.length, options));
   }
 }
 
-export async function splitText(text: string, options: SplitTextOptions): Promise<SplitChunk[]> {
+async function splitTextFromSegments(segments: string[], options: SplitTextOptions): Promise<SplitChunk[]> {
   const chunks: SplitChunk[] = [];
-  const tokens = text.split(/(\s+)/);
-  let chunkStart = 0;
+  const totalCharacters = segments.reduce((sum, segment) => sum + segment.length, 0);
+  let processedCharacters = 0;
+  let chunkParts: string[] = [];
   let chunkWords = 0;
   let chunkBytes = 0;
+  let pendingTokenParts: string[] = [];
+  let pendingTokenWords = 0;
+  let pendingTokenBytes = 0;
+  let pendingTokenIsWord = false;
 
-  for (let index = 0; index < tokens.length; index += 1) {
-    throwIfAborted(options.signal);
-    const token = tokens[index];
-    const isWord = /\S/.test(token);
-    const tokenBytes = byteLen(token);
-    const tokenWords = isWord ? 1 : 0;
+  const flushPendingToken = (): void => {
+    if (pendingTokenParts.length === 0) {
+      return;
+    }
+
     const wouldExceed =
-      chunkWords + tokenWords > options.maxWords ||
-      chunkBytes + tokenBytes > options.maxBytes;
+      chunkWords + pendingTokenWords > options.maxWords ||
+      chunkBytes + pendingTokenBytes > options.maxBytes;
 
     if (wouldExceed && chunkWords > 0) {
-      pushChunk(chunks, tokens, { start: chunkStart, end: index }, options);
-      chunkStart = index;
-      chunkWords = tokenWords;
-      chunkBytes = tokenBytes;
+      flushChunk(chunks, chunkParts, options);
+      chunkParts = [...pendingTokenParts];
+      chunkWords = pendingTokenWords;
+      chunkBytes = pendingTokenBytes;
     } else {
-      chunkWords += tokenWords;
-      chunkBytes += tokenBytes;
+      chunkParts.push(...pendingTokenParts);
+      chunkWords += pendingTokenWords;
+      chunkBytes += pendingTokenBytes;
     }
 
-    if (index > 0 && index % 5000 === 0) {
-      await emitProgress(
-        options.onProgress,
-        (index / tokens.length) * 100,
-        "Splitting current file",
-        options.signal,
-      );
+    pendingTokenParts = [];
+    pendingTokenWords = 0;
+    pendingTokenBytes = 0;
+    pendingTokenIsWord = false;
+  };
+
+  for (const segment of segments) {
+    for (const char of createCharIterator(segment)) {
+      throwIfAborted(options.signal);
+      const isWordChar = !/\s/u.test(char);
+      const tokenBytes = byteLen(char);
+
+      if (pendingTokenParts.length === 0) {
+        pendingTokenIsWord = isWordChar;
+      } else if (pendingTokenIsWord !== isWordChar) {
+        flushPendingToken();
+        pendingTokenIsWord = isWordChar;
+      }
+
+      pendingTokenParts.push(char);
+      if (isWordChar) {
+        pendingTokenWords = 1;
+      }
+      pendingTokenBytes += tokenBytes;
+      processedCharacters += char.length;
+
+      if (processedCharacters > 0 && processedCharacters % 5000 === 0) {
+        await emitProgress(
+          options.onProgress,
+          (processedCharacters / totalCharacters) * 100,
+          "Splitting current file",
+          options.signal,
+        );
+      }
     }
   }
 
-  if (chunkStart < tokens.length) {
-    pushChunk(chunks, tokens, { start: chunkStart, end: tokens.length }, options);
-  }
+  flushPendingToken();
+  flushChunk(chunks, chunkParts, options);
 
   await emitProgress(options.onProgress, 100, "Split complete", options.signal);
   return ensureUniqueFileNames(chunks);
+}
+
+export async function splitText(text: string, options: SplitTextOptions): Promise<SplitChunk[]> {
+  return splitTextFromSegments([text], options);
+}
+
+export async function splitTextSegments(segments: string[], options: SplitTextOptions): Promise<SplitChunk[]> {
+  return splitTextFromSegments(segments, options);
 }
