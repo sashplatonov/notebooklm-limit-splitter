@@ -15,6 +15,7 @@ import {
   formatBytes,
   formatNumber,
   isTelegramExportJson,
+  yieldToProcessingTask,
 } from "./shared";
 
 describe("splitter/shared core", () => {
@@ -119,6 +120,13 @@ describe("splitter/shared helpers", () => {
     const controller = new AbortController();
     controller.abort();
     await expect(emitProgress(vi.fn(), 50, "test", controller.signal)).rejects.toThrow(ProcessingAbortedError);
+  });
+
+  it("yields to the next task and respects aborts", async () => {
+    await expect(yieldToProcessingTask()).resolves.toBeUndefined();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(yieldToProcessingTask(controller.signal)).rejects.toThrow(ProcessingAbortedError);
   });
 
   it("formats numbers and bytes", () => {

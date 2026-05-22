@@ -217,6 +217,59 @@ export function ensureUniqueFileNames(chunks: SplitChunk[]): SplitChunk[] {
   });
 }
 
+export async function yieldToProcessingTask(signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = (onAbort?: () => void): void => {
+      if (onAbort) {
+        signal?.removeEventListener("abort", onAbort);
+      }
+    };
+
+    const finish = (onAbort?: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup(onAbort);
+      resolve();
+    };
+
+    const fail = (onAbort?: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup(onAbort);
+      reject(new ProcessingAbortedError());
+    };
+
+    const onAbort = () => {
+      fail(onAbort);
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    if (typeof MessageChannel !== "undefined") {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        channel.port1.close();
+        channel.port2.close();
+        finish(onAbort);
+      };
+      channel.port2.postMessage(undefined);
+      return;
+    }
+
+    setTimeout(() => {
+      finish(onAbort);
+    }, 0);
+  });
+}
+
 export async function emitProgress(
   onProgress: ProgressCallback | undefined,
   percent: number,
@@ -229,9 +282,7 @@ export async function emitProgress(
   }
 
   onProgress({ percent: Math.max(0, Math.min(100, Math.round(percent))), stage });
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 0);
-  });
+  await yieldToProcessingTask(signal);
   throwIfAborted(signal);
 }
 

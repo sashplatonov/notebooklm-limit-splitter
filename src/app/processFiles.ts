@@ -1,7 +1,7 @@
 import type { SplitLimits } from "../types";
 import { prepareFileForNotebookLm, type PreparedFile } from "../utils/filePipeline";
 import { splitFile } from "../utils/splitter";
-import { ProcessingAbortedError, throwIfAborted } from "../utils/splitter/shared";
+import { ProcessingAbortedError, throwIfAborted, yieldToProcessingTask } from "../utils/splitter/shared";
 import { createSummary } from "./formatting";
 import type { ProcessedFileBatch, ProcessingProgress, QueuedImportItem } from "./types";
 
@@ -31,28 +31,6 @@ interface ProcessSingleItemArgs {
 interface PreparedBatchItem {
   item: QueuedImportItem;
   prepared: PreparedFile;
-}
-
-function wait(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new ProcessingAbortedError());
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-
-    const onAbort = () => {
-      clearTimeout(timeoutId);
-      signal?.removeEventListener("abort", onAbort);
-      reject(new ProcessingAbortedError());
-    };
-
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
 }
 
 function buildProgress(progress: ProcessingProgress): ProcessingProgress {
@@ -101,7 +79,7 @@ async function processSingleItem({
     currentFilePercent: 5,
     currentStage: "File loaded",
   });
-  await wait(10, signal);
+  await yieldToProcessingTask(signal);
 
   return prepared;
 }
@@ -149,7 +127,7 @@ async function processCombinedItems({
     currentFilePercent: 5,
     currentStage: "Combining files",
   });
-  await wait(10, signal);
+  await yieldToProcessingTask(signal);
 
   return splitFile(combinedContent, combinedFileName, limits, {
     originalName,
@@ -188,7 +166,7 @@ export async function processFilesForNotebookLm({
     currentFilePercent: 0,
     currentStage: "Waiting to start",
   });
-  await wait(30, signal);
+  await yieldToProcessingTask(signal);
 
   for (const [index, item] of items.entries()) {
     const { fileName, queueId } = item;
@@ -200,7 +178,7 @@ export async function processFilesForNotebookLm({
       currentStage: "Preparing file",
     });
     try {
-      await wait(0, signal);
+      await yieldToProcessingTask(signal);
       throwIfAborted(signal);
       const result = await processSingleItem({
         index,
@@ -239,7 +217,7 @@ export async function processFilesForNotebookLm({
   if (!canceled && preparedItems.length > 0) {
     const combinedStartedAt = new Date().toISOString();
     try {
-      await wait(0, signal);
+      await yieldToProcessingTask(signal);
       throwIfAborted(signal);
       const combinedResult = await processCombinedItems({
         preparedItems,
