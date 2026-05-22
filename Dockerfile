@@ -7,7 +7,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM deps AS build
-COPY tsconfig.json vite.config.ts ./
+COPY index.html tsconfig.json vite.config.ts ./
+COPY public ./public
 COPY src ./src
 RUN npm run build
 
