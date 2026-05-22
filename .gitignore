@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+coverage/
+.git/
+.next/
+.cache/
+.turbo/
+tmp/
+*.log
+.DS_Store
+.agent/
+.codex/
+.claudeignore
+.codexignore
+.geminiignore
+.mcp.json
