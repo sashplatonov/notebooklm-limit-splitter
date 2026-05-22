@@ -26,10 +26,9 @@ function setupHook() {
 async function addFiles(
   hook: ReturnType<typeof setupHook>,
   files: File[],
-  maxFileSizeMB?: number,
 ): Promise<void> {
   await act(async () => {
-    await hook.result.current.addFiles(files, maxFileSizeMB);
+    await hook.result.current.addFiles(files);
   });
 }
 
@@ -129,10 +128,12 @@ function registerAddFilesTests(): void {
       expect(hook.result.current.pendingImports).toHaveLength(2);
     });
 
-    it("records validation issues for unsupported and oversized files before reading them", async () => {
+    it("records validation issues for unsupported and source files above 1 GB before reading them", async () => {
       const hook = setupHook();
       await addFiles(hook, [new File([], "test.pdf", { type: "application/pdf" })]);
-      await addFiles(hook, [createMockFile("content", "test.txt")], 0.000001);
+      const oversizedFile = createMockFile("content", "test.txt");
+      Object.defineProperty(oversizedFile, "size", { configurable: true, value: 2 * 1024 * 1024 * 1024 });
+      await addFiles(hook, [oversizedFile]);
 
       expect(hook.result.current.pendingImports).toHaveLength(0);
       expect(hook.result.current.validationIssues).toHaveLength(2);

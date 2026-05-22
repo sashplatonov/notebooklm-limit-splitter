@@ -16,7 +16,6 @@ interface ProcessSingleItemArgs {
   item: QueuedImportItem;
   itemCount: number;
   onProgress: (progress: ProcessingProgress) => void;
-  maxFileSizeBytes: number;
   signal?: AbortSignal;
 }
 
@@ -75,11 +74,10 @@ async function processSingleItem({
   item,
   itemCount,
   onProgress,
-  maxFileSizeBytes,
   signal,
 }: ProcessSingleItemArgs): Promise<PreparedFile> {
   const { file, fileName, selectedJsonFields } = item;
-  const prepared = await prepareFileForNotebookLm(file, { selectedJsonFields, maxFileSizeBytes });
+  const prepared = await prepareFileForNotebookLm(file, { selectedJsonFields });
   emitQueueProgress(onProgress, {
     itemCount,
     completedFiles: index,
@@ -105,7 +103,6 @@ async function processQueuedItem({
   index,
   item,
   itemCount,
-  limits,
   onProgress,
   signal,
 }: ProcessSingleItemArgs & { limits: SplitLimits }): Promise<ProcessQueuedItemResult> {
@@ -119,7 +116,6 @@ async function processQueuedItem({
       item,
       itemCount,
       onProgress,
-      maxFileSizeBytes: limits.maxFileSizeMB * 1024 * 1024,
       signal,
     });
 
@@ -160,12 +156,10 @@ async function processQueuedItem({
 
 export async function processQueuedItems({
   items,
-  limits,
   onProgress,
   signal,
 }: {
   items: QueuedImportItem[];
-  limits: SplitLimits;
   onProgress: (progress: ProcessingProgress) => void;
   signal?: AbortSignal;
 }): Promise<PreparedItemsBatch> {
@@ -198,7 +192,6 @@ export async function processQueuedItems({
       index,
       item,
       itemCount: items.length,
-      limits,
       onProgress,
       signal,
     });

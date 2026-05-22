@@ -89,9 +89,11 @@ function registerInspectJsonFileTests(): void {
 
     it("rejects oversized JSON files before reading them", async () => {
       const json = JSON.stringify({ message: "too large" });
+      const file = new File([json], "test.json", { type: "application/json" });
+      Object.defineProperty(file, "size", { configurable: true, value: 2 * 1024 * 1024 * 1024 });
       await expect(
-        inspectJsonFile(new File([json], "test.json", { type: "application/json" }), 1),
-      ).rejects.toThrow(/pre-read limit/);
+        inspectJsonFile(file),
+      ).rejects.toThrow(/browser import limit/);
     });
   });
 }
@@ -137,9 +139,10 @@ function registerPrepareFileTests(): void {
       expect(invalidJson.content).toBe("not valid json");
     });
 
-    it("rejects oversized files before reading them", async () => {
+    it("rejects source files above the 1 GB browser import limit", async () => {
       const file = new File(["plain text"], "test.txt", { type: "text/plain" });
-      await expect(prepareFileForNotebookLm(file, { maxFileSizeBytes: 1 })).rejects.toThrow(/pre-read limit/);
+      Object.defineProperty(file, "size", { configurable: true, value: 2 * 1024 * 1024 * 1024 });
+      await expect(prepareFileForNotebookLm(file)).rejects.toThrow(/browser import limit/);
     });
   });
 }
@@ -151,9 +154,10 @@ function registerValidationTests(): void {
       expect(validateFileBeforeRead(file, 1024)?.reason).toContain("Binary formats");
     });
 
-    it("returns a validation error for oversized files", () => {
+    it("returns a validation error for source files above 1 GB", () => {
       const file = new File(["plain text"], "test.txt", { type: "text/plain" });
-      expect(validateFileBeforeRead(file, 1)?.reason).toContain("pre-read limit");
+      Object.defineProperty(file, "size", { configurable: true, value: 2 * 1024 * 1024 * 1024 });
+      expect(validateFileBeforeRead(file)?.reason).toContain("browser import limit");
     });
   });
 }

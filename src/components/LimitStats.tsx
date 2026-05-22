@@ -3,7 +3,7 @@ import type { SplitLimits } from "../types";
 
 const LIMIT_ITEMS = [
   { key: "maxWordsPerSource", label: "Words / source", color: "bg-[#fff5e6]" },
-  { key: "maxFileSizeMB", label: "File size", color: "bg-[#ecfeff]" },
+  { key: "maxFileSizeMB", label: "Chunk size", color: "bg-[#ecfeff]" },
   { key: "maxSourcesPerNotebook", label: "Sources / notebook", color: "bg-[#f8fafc]" },
 ] as const;
 

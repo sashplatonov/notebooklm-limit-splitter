@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { DEFAULT_LIMITS } from "../types";
 import type { JsonFieldConfig } from "../components/JsonFieldSelectorModal";
 import type { QueuedImportIssue, QueuedImportItem } from "./types";
 import { inspectJsonFile, validateFileBeforeRead } from "../utils/filePipeline";
@@ -13,12 +12,11 @@ export function useImportQueue() {
   const [validationIssues, setValidationIssues] = useState<QueuedImportIssue[]>([]);
   const [activeJsonFieldConfig, setActiveJsonFieldConfig] = useState<JsonFieldConfig | null>(null);
 
-  const addFiles = useCallback(async (files: File[], maxFileSizeMB = DEFAULT_LIMITS.maxFileSizeMB) => {
-    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+  const addFiles = useCallback(async (files: File[]) => {
     const preparedEntries = await Promise.all(
       files.map(async (file) => {
         const queueId = createQueueId(file);
-        const validationError = validateFileBeforeRead(file, maxFileSizeBytes);
+        const validationError = validateFileBeforeRead(file);
         if (validationError) {
           return {
             kind: "issue" as const,
@@ -32,7 +30,7 @@ export function useImportQueue() {
         }
 
         const inspection = file.name.toLowerCase().endsWith(".json")
-          ? await inspectJsonFile(file, maxFileSizeBytes).catch(() => null)
+          ? await inspectJsonFile(file).catch(() => null)
           : null;
         const fieldOptions = inspection?.fieldOptions ?? [];
 

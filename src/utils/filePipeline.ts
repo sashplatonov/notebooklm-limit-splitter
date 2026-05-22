@@ -1,4 +1,4 @@
-import { DEFAULT_LIMITS, NotebookTextFormat } from "../types";
+import { NotebookTextFormat } from "../types";
 import { extractJsonFieldOptions, filterJsonFields, type JsonFieldOption } from "./jsonFields";
 import { formatBytes } from "./splitter/shared";
 
@@ -12,7 +12,6 @@ export interface PreparedFile {
 
 interface PrepareFileOptions {
   selectedJsonFields?: string[];
-  maxFileSizeBytes?: number;
 }
 
 export interface JsonFileInspection {
@@ -27,7 +26,7 @@ const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const CSV_EXTENSIONS = new Set([".csv"]);
 const TEXT_EXTENSIONS = new Set([".txt", ".log", ".xml", ".yaml", ".yml", ".ini", ".cfg"]);
 const JSON_EXTENSIONS = new Set([".json"]);
-const DEFAULT_MAX_FILE_SIZE_BYTES = DEFAULT_LIMITS.maxFileSizeMB * 1024 * 1024;
+const DEFAULT_MAX_SOURCE_FILE_SIZE_BYTES = 1024 * 1024 * 1024;
 
 export const INPUT_EXTENSIONS = [
   ".json",
@@ -62,22 +61,10 @@ function isTextLikeMime(type: string): boolean {
   );
 }
 
-function resolveMaxFileSizeBytes(maxFileSizeBytes?: number): number {
-  if (typeof maxFileSizeBytes === "number" && Number.isFinite(maxFileSizeBytes) && maxFileSizeBytes > 0) {
-    return maxFileSizeBytes;
-  }
-
-  return DEFAULT_MAX_FILE_SIZE_BYTES;
-}
-
-export function validateFileBeforeRead(
-  file: File,
-  maxFileSizeBytes?: number,
-): FileValidationError | null {
-  const resolvedMaxFileSizeBytes = resolveMaxFileSizeBytes(maxFileSizeBytes);
-  if (file.size > resolvedMaxFileSizeBytes) {
+export function validateFileBeforeRead(file: File): FileValidationError | null {
+  if (file.size > DEFAULT_MAX_SOURCE_FILE_SIZE_BYTES) {
     return {
-      reason: `${file.name} is ${formatBytes(file.size)}, which exceeds the pre-read limit of ${formatBytes(resolvedMaxFileSizeBytes)}. Lower the file size or increase Max file size in Settings.`,
+      reason: `${file.name} is ${formatBytes(file.size)}, which exceeds the browser import limit of ${formatBytes(DEFAULT_MAX_SOURCE_FILE_SIZE_BYTES)}. Split the source into smaller inputs before uploading.`,
     };
   }
 
@@ -116,14 +103,13 @@ export async function readFileAsText(file: File): Promise<string> {
 
 export async function inspectJsonFile(
   file: File,
-  maxFileSizeBytes?: number,
 ): Promise<JsonFileInspection | null> {
   const ext = getExt(file.name);
   if (!JSON_EXTENSIONS.has(ext)) {
     return null;
   }
 
-  const validationError = validateFileBeforeRead(file, maxFileSizeBytes);
+  const validationError = validateFileBeforeRead(file);
   if (validationError) {
     throw new Error(validationError.reason);
   }
@@ -139,7 +125,7 @@ export async function prepareFileForNotebookLm(
   file: File,
   options: PrepareFileOptions = {},
 ): Promise<PreparedFile> {
-  const validationError = validateFileBeforeRead(file, options.maxFileSizeBytes);
+  const validationError = validateFileBeforeRead(file);
   if (validationError) {
     throw new Error(validationError.reason);
   }

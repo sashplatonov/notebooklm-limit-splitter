@@ -102,8 +102,8 @@ export function useAppController() {
   );
 
   const handleFiles = useCallback(
-    (files: File[]) => addFiles(files, limits.maxFileSizeMB),
-    [addFiles, limits.maxFileSizeMB],
+    (files: File[]) => addFiles(files),
+    [addFiles],
   );
 
   const handleEnableNotifications = useCallback(async (): Promise<void> => {

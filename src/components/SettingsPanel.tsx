@@ -246,8 +246,8 @@ export default function SettingsPanel({
             />
             <div className="border-t border-slate-950/10" />
             <SettingField
-              label="Max file size"
-              description="NotebookLM limit: 200 MB per file"
+              label="Max chunk size"
+              description="NotebookLM limit: 200 MB per output file after splitting"
               value={limits.maxFileSizeMB}
               min={1}
               max={200}
@@ -280,7 +280,7 @@ export default function SettingsPanel({
 
           <div className="flex items-center justify-between pt-1">
             <div className="text-xs text-slate-400">
-              Limits match the official NotebookLM documentation
+              Split limits match the official NotebookLM upload limits. Source imports can be up to 1 GB before preprocessing.
             </div>
             <button
               onClick={resetAll}
