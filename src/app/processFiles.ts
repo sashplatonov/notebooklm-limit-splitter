@@ -8,6 +8,11 @@ interface ProcessFilesArgs {
   files: File[];
   limits: SplitLimits;
   onProgress: (progress: ProcessingProgress) => void;
+  jsonFieldSelections?: Record<string, string[]>;
+}
+
+function createFileKey(file: File): string {
+  return `${file.name}::${file.size}::${file.lastModified}`;
 }
 
 function wait(ms: number): Promise<void> {
@@ -30,6 +35,7 @@ export async function processFilesForNotebookLm({
   files,
   limits,
   onProgress,
+  jsonFieldSelections = {},
 }: ProcessFilesArgs): Promise<ProcessedFileBatch> {
   const startedAt = new Date().toISOString();
   const results: ProcessedFileBatch["results"] = [];
@@ -55,7 +61,9 @@ export async function processFilesForNotebookLm({
     await wait(0);
 
     try {
-      const prepared = await prepareFileForNotebookLm(file);
+      const prepared = await prepareFileForNotebookLm(file, {
+        selectedJsonFields: jsonFieldSelections[createFileKey(file)],
+      });
       onProgress(buildProgress({
         totalFiles: files.length,
         completedFiles: index,

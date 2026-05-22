@@ -11,14 +11,27 @@ import type { LastRunSummary, ProcessingProgress } from "./app/types";
 import { DEFAULT_LIMITS, type SplitLimits, type SplitResult } from "./types";
 import { createZipBlob, downloadBlob } from "./utils/zip";
 import AppHeader from "./components/AppHeader";
-import DropZone from "./components/DropZone";
-import EmptyState from "./components/EmptyState";
-import LimitStats from "./components/LimitStats";
-import ProcessingPanel from "./components/ProcessingPanel";
-import ResultsSection from "./components/ResultsSection";
-import SettingsPanel from "./components/SettingsPanel";
-import HeroIllustration from "./components/HeroIllustration";
-import FooterStats from "./components/FooterStats";
+import AppFooter from "./components/AppFooter";
+import HeroSection from "./components/HeroSection";
+import JsonFieldSelectorModal from "./components/JsonFieldSelectorModal";
+import ProcessingWorkspace from "./components/ProcessingWorkspace";
+import { useJsonFieldImportFlow } from "./app/useJsonFieldImportFlow";
+
+function downloadArchiveForResults(
+  notebookPlan: ReturnType<typeof buildNotebookPlan>,
+  results: SplitResult[],
+): void {
+  const entries = notebookPlan.sortedChunks.map((item) => {
+    const placement = notebookPlan.chunkPlacements[item.resultIndex][item.chunkIndex];
+    const result = results[item.resultIndex];
+    const folderBase = result.normalizedName.replace(/\.[^/.]+$/, "");
+    return {
+      name: `notebook-${placement.notebookNumber}/${String(item.resultIndex + 1).padStart(2, "0")}_${folderBase}/${item.chunk.fileName}`,
+      content: item.chunk.content,
+    };
+  });
+  downloadBlob(buildArchiveName(), createZipBlob(entries));
+}
 
 export default function App() {
   const [limits, setLimits] = useState<SplitLimits>({ ...DEFAULT_LIMITS });
@@ -36,26 +49,26 @@ export default function App() {
     currentFilePercent: 0,
     currentStage: null,
   });
-
   useEffect(() => {
     processingStatsRef.current = processingStats;
   }, [processingStats]);
 
   useEffect(() => {
     let active = true;
-
     void fetchProcessingStats().then((stats) => {
       if (active) {
         setProcessingStats(stats);
       }
     });
-
     return () => {
       active = false;
     };
   }, []);
 
-  const handleFiles = useCallback(async (files: File[]) => {
+  const processSelectedFiles = useCallback(async (
+    files: File[],
+    jsonFieldSelections: Record<string, string[]> = {},
+  ) => {
     setProcessing(true);
     setErrorMessage(null);
     setLastRunSummary(null);
@@ -64,25 +77,21 @@ export default function App() {
       const batch = await processFilesForNotebookLm({
         files,
         limits,
-        onProgress: (nextProgress) => {
-          setProgress(nextProgress);
-        },
+        jsonFieldSelections,
+        onProgress: setProgress,
       });
 
       if (batch.results.length > 0) {
-        setResults((prev) => [...prev, ...batch.results]);
+        setResults((previous) => [...previous, ...batch.results]);
       }
-
       if (batch.errors.length > 0) {
         setErrorMessage(batch.errors.join(" "));
       }
 
       setLastRunSummary(batch.summary);
-      const nextStats = await recordProcessedFiles(
-        processingStatsRef.current,
-        batch.summary.filesProcessed,
+      setProcessingStats(
+        await recordProcessedFiles(processingStatsRef.current, batch.summary.filesProcessed),
       );
-      setProcessingStats(nextStats);
     } finally {
       setProcessing(false);
       setProgress({
@@ -95,29 +104,18 @@ export default function App() {
     }
   }, [limits]);
 
-  const removeResult = (index: number) => {
-    setResults((prev) => prev.filter((_, i) => i !== index));
-  };
+  const {
+    handleFiles,
+    jsonFieldConfigs,
+    closeJsonFieldSelector,
+    confirmJsonFieldSelection,
+    updateJsonFieldSelection,
+  } = useJsonFieldImportFlow(processSelectedFiles);
 
-  const notebookPlan = useMemo(() => {
-    return buildNotebookPlan(results, limits.maxSourcesPerNotebook);
-  }, [limits.maxSourcesPerNotebook, results]);
-
-  const clearAll = () => setResults([]);
-  const downloadArchive = () => {
-    const entries = notebookPlan.sortedChunks.map((item) => {
-      const placement = notebookPlan.chunkPlacements[item.resultIndex][item.chunkIndex];
-      const result = results[item.resultIndex];
-      const index = item.resultIndex;
-      const folderBase = result.normalizedName.replace(/\.[^/.]+$/, "");
-      const folder = `${String(index + 1).padStart(2, "0")}_${folderBase}`;
-      return {
-        name: `notebook-${placement.notebookNumber}/${folder}/${item.chunk.fileName}`,
-        content: item.chunk.content,
-      };
-    });
-    downloadBlob(buildArchiveName(), createZipBlob(entries));
-  };
+  const notebookPlan = useMemo(
+    () => buildNotebookPlan(results, limits.maxSourcesPerNotebook),
+    [limits.maxSourcesPerNotebook, results],
+  );
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--color-canvas)] text-slate-950">
@@ -127,84 +125,38 @@ export default function App() {
         totalChunks={notebookPlan.totalChunks}
         totalNotebooks={notebookPlan.totalNotebooks}
       />
-
       <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6">
-        <section className="grid items-center gap-5 rounded-[2rem] border-4 border-slate-950 bg-[color:var(--color-surface)] px-5 py-5 shadow-[12px_12px_0_0_rgba(15,23,42,0.12)] lg:grid-cols-[1.3fr_0.7fr] lg:px-6">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <h2 className="font-display max-w-3xl text-3xl font-black uppercase leading-none text-slate-950 sm:text-4xl">
-                Split large exports into NotebookLM-ready source files
-              </h2>
-              <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                Load JSON or text files, keep processing local in the browser, and export chunks that are easier to import and organize.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <div className="rounded-[1.2rem] border-2 border-slate-950 bg-[#fff1df] px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Supported input</p>
-                <p className="mt-1 text-sm font-bold text-slate-950">JSON, TXT, Markdown exports</p>
-              </div>
-              <div className="rounded-[1.2rem] border-2 border-slate-950 bg-[#ecfeff] px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Processing mode</p>
-                <p className="mt-1 text-sm font-bold text-slate-950">Browser-only, no file upload</p>
-              </div>
-            </div>
-          </div>
-          <div className="mx-auto hidden w-full max-w-[16rem] lg:block">
-            <HeroIllustration />
-          </div>
-        </section>
-
-        <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="space-y-6">
-            <div>
-              <DropZone onFiles={handleFiles} />
-              {errorMessage && (
-                <div className="mt-4 rounded-[1.6rem] border-2 border-red-500 bg-[#fff1f2] px-5 py-4">
-                  <p className="text-sm font-semibold text-red-700">Failed to process file</p>
-                  <p className="mt-1 break-words text-xs text-red-600">{errorMessage}</p>
-                </div>
-              )}
-              {processing && <ProcessingPanel progress={progress} />}
-            </div>
-
-            {results.length > 0 && (
-              <ResultsSection
-                chunkPlacements={notebookPlan.chunkPlacements}
-                lastRunSummary={lastRunSummary}
-                limits={limits}
-                onClearAll={clearAll}
-                onDownloadArchive={downloadArchive}
-                onRemoveResult={removeResult}
-                results={results}
-                totalBytes={notebookPlan.totalBytes}
-                totalChunks={notebookPlan.totalChunks}
-                totalNotebooks={notebookPlan.totalNotebooks}
-                totalWords={notebookPlan.totalWords}
-              />
-            )}
-          </div>
-
-          <aside className="space-y-6">
-            <LimitStats limits={limits} />
-            <SettingsPanel
-              limits={limits}
-              onChange={setLimits}
-              open={settingsOpen}
-              onToggle={() => setSettingsOpen((p) => !p)}
-            />
-          </aside>
-        </div>
-
-        {results.length === 0 && !processing && <EmptyState />}
+        <HeroSection />
+        <ProcessingWorkspace
+          errorMessage={errorMessage}
+          handleFiles={handleFiles}
+          lastRunSummary={lastRunSummary}
+          limits={limits}
+          notebookPlan={notebookPlan}
+          onClearAll={() => setResults([])}
+          onDownloadArchive={() => downloadArchiveForResults(notebookPlan, results)}
+          onRemoveResult={(index) => {
+            setResults((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+          }}
+          onToggleSettings={() => setSettingsOpen((previous) => !previous)}
+          processing={processing}
+          progress={progress}
+          results={results}
+          settingsOpen={settingsOpen}
+          setLimits={setLimits}
+        />
       </main>
-
-      <footer className="mx-auto max-w-6xl px-4 pb-8 pt-4">
-        <FooterStats stats={processingStats} />
-        <p className="text-center text-xs text-slate-400">
-          NotebookLM Splitter · Processing happens locally in your browser, files are never uploaded
-        </p>
-      </footer>
+      <AppFooter stats={processingStats} />
+      {jsonFieldConfigs && (
+        <JsonFieldSelectorModal
+          configs={jsonFieldConfigs}
+          onCancel={closeJsonFieldSelector}
+          onConfirm={() => {
+            void confirmJsonFieldSelection();
+          }}
+          onChangeSelection={updateJsonFieldSelection}
+        />
+      )}
     </div>
   );
 }

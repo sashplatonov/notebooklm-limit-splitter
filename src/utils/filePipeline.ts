@@ -1,4 +1,5 @@
 import { NotebookTextFormat } from "../types";
+import { extractJsonFieldOptions, filterJsonFields, type JsonFieldOption } from "./jsonFields";
 
 export interface PreparedFile {
   originalName: string;
@@ -6,6 +7,14 @@ export interface PreparedFile {
   outputFormat: NotebookTextFormat;
   content: string;
   sourceKind: "json" | "text";
+}
+
+interface PrepareFileOptions {
+  selectedJsonFields?: string[];
+}
+
+export interface JsonFileInspection {
+  fieldOptions: JsonFieldOption[];
 }
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
@@ -62,7 +71,23 @@ export async function readFileAsText(file: File): Promise<string> {
   });
 }
 
-export async function prepareFileForNotebookLm(file: File): Promise<PreparedFile> {
+export async function inspectJsonFile(file: File): Promise<JsonFileInspection | null> {
+  const ext = getExt(file.name);
+  if (!JSON_EXTENSIONS.has(ext)) {
+    return null;
+  }
+
+  const raw = await readFileAsText(file);
+  const parsed = JSON.parse(raw) as unknown;
+  return {
+    fieldOptions: extractJsonFieldOptions(parsed),
+  };
+}
+
+export async function prepareFileForNotebookLm(
+  file: File,
+  options: PrepareFileOptions = {},
+): Promise<PreparedFile> {
   const ext = getExt(file.name);
   if (
     !MARKDOWN_EXTENSIONS.has(ext) &&
@@ -81,7 +106,11 @@ export async function prepareFileForNotebookLm(file: File): Promise<PreparedFile
   if (JSON_EXTENSIONS.has(ext)) {
     let normalized = raw;
     try {
-      normalized = JSON.stringify(JSON.parse(raw), null, 2);
+      const parsed = JSON.parse(raw) as unknown;
+      const filtered = options.selectedJsonFields
+        ? filterJsonFields(parsed, options.selectedJsonFields)
+        : parsed;
+      normalized = JSON.stringify(filtered, null, 2);
     } catch {
       normalized = raw;
     }
