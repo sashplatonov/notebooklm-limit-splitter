@@ -128,23 +128,31 @@ export default function App() {
         totalNotebooks={notebookPlan.totalNotebooks}
       />
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
-        <section className="grid items-center gap-8 rounded-[2rem] border-4 border-slate-950 bg-[color:var(--color-surface)] px-6 py-8 shadow-[12px_12px_0_0_rgba(15,23,42,0.12)] lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
-          <div className="space-y-5">
-            <div className="inline-flex rounded-full border-2 border-slate-950 bg-[#fff5e6] px-4 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-950">
-              Modern Flat Design
-            </div>
-            <div className="space-y-3">
-              <h2 className="font-display max-w-xl text-4xl font-black uppercase leading-none text-slate-950 sm:text-5xl">
-                Turn bulky research files into clean NotebookLM-ready chunks.
+      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6">
+        <section className="grid items-center gap-5 rounded-[2rem] border-4 border-slate-950 bg-[color:var(--color-surface)] px-5 py-5 shadow-[12px_12px_0_0_rgba(15,23,42,0.12)] lg:grid-cols-[1.3fr_0.7fr] lg:px-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h2 className="font-display max-w-3xl text-3xl font-black uppercase leading-none text-slate-950 sm:text-4xl">
+                Split large exports into NotebookLM-ready source files
               </h2>
-              <p className="max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
-                Upload JSON or text-based files. The app converts them into supported NotebookLM
-                formats, keeps the workflow local in your browser, and prepares output for faster imports.
+              <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                Load JSON or text files, keep processing local in the browser, and export chunks that are easier to import and organize.
               </p>
             </div>
+            <div className="flex flex-wrap gap-3">
+              <div className="rounded-[1.2rem] border-2 border-slate-950 bg-[#fff1df] px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Supported input</p>
+                <p className="mt-1 text-sm font-bold text-slate-950">JSON, TXT, Markdown exports</p>
+              </div>
+              <div className="rounded-[1.2rem] border-2 border-slate-950 bg-[#ecfeff] px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Processing mode</p>
+                <p className="mt-1 text-sm font-bold text-slate-950">Browser-only, no file upload</p>
+              </div>
+            </div>
           </div>
-          <HeroIllustration />
+          <div className="mx-auto hidden w-full max-w-[16rem] lg:block">
+            <HeroIllustration />
+          </div>
         </section>
 
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
