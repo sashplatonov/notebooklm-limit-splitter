@@ -1,3 +1,4 @@
+import type { BrowserNotificationPermission } from "../app/browserNotifications";
 import type { LastRunSummary, NotebookPlan, ProcessingProgress, QueuedImportItem } from "../app/types";
 import type { SplitLimits, SplitResult } from "../types";
 import DropZone from "./DropZone";
@@ -13,10 +14,15 @@ interface Props {
   handleFiles: (files: File[]) => Promise<void>;
   lastRunSummary: LastRunSummary | null;
   limits: SplitLimits;
+  notificationPermission: BrowserNotificationPermission;
+  notificationsEnabled: boolean;
+  notificationRequestPending: boolean;
   notebookPlan: NotebookPlan;
   onClearPendingImports: () => void;
   onClearAll: () => void;
+  onDisableNotifications: () => void;
   onDownloadArchive: () => void;
+  onEnableNotifications: () => void;
   onEditJsonFields: (queueId: string) => void;
   onRemoveResult: (index: number) => void;
   onRemovePendingImport: (queueId: string) => void;
@@ -37,10 +43,15 @@ export default function ProcessingWorkspace(props: Props) {
     handleFiles,
     lastRunSummary,
     limits,
+    notificationPermission,
+    notificationsEnabled,
+    notificationRequestPending,
     notebookPlan,
     onClearPendingImports,
     onClearAll,
+    onDisableNotifications,
     onDownloadArchive,
+    onEnableNotifications,
     onEditJsonFields,
     onRemoveResult,
     onRemovePendingImport,
@@ -100,7 +111,12 @@ export default function ProcessingWorkspace(props: Props) {
           <LimitStats limits={limits} />
           <SettingsPanel
             limits={limits}
+            notificationPermission={notificationPermission}
+            notificationsEnabled={notificationsEnabled}
+            notificationRequestPending={notificationRequestPending}
             onChange={setLimits}
+            onDisableNotifications={onDisableNotifications}
+            onEnableNotifications={onEnableNotifications}
             open={settingsOpen}
             onToggle={onToggleSettings}
           />

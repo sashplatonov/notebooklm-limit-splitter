@@ -1,11 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 import type { SplitLimits, SplitResult } from "../types";
+import type { ProcessedFileBatch } from "./types";
 import { processFilesForNotebookLm } from "./processFiles";
 import { recordProcessedFiles } from "./processingStats";
 import type { LastRunSummary, ProcessingProgress, ProcessingStats, QueuedImportItem } from "./types";
 
 interface Args {
   limits: SplitLimits;
+  onProcessingComplete?: (batch: ProcessedFileBatch) => void;
   pendingImports: QueuedImportItem[];
   processingStats: ProcessingStats;
   removeCompletedImports: (completedQueueIds: string[]) => void;
@@ -25,6 +27,7 @@ const EMPTY_PROGRESS: ProcessingProgress = {
 export function useProcessingRunner(args: Args) {
   const {
     limits,
+    onProcessingComplete,
     pendingImports,
     processingStats,
     removeCompletedImports,
@@ -71,6 +74,8 @@ export function useProcessingRunner(args: Args) {
           await recordProcessedFiles(processingStats, batch.summary.filesProcessed),
         );
       }
+
+      onProcessingComplete?.(batch);
     }).finally(() => {
       abortControllerRef.current = null;
       setProcessing(false);
@@ -78,6 +83,7 @@ export function useProcessingRunner(args: Args) {
     });
   }, [
     limits,
+    onProcessingComplete,
     pendingImports,
     processing,
     processingStats,

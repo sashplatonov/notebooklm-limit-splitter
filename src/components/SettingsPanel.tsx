@@ -1,9 +1,15 @@
 import { SplitLimits, DEFAULT_LIMITS } from "../types";
 import { formatNumber } from "../utils/splitter";
+import type { BrowserNotificationPermission } from "../app/browserNotifications";
 
 interface Props {
   limits: SplitLimits;
+  notificationPermission: BrowserNotificationPermission;
+  notificationsEnabled: boolean;
+  notificationRequestPending: boolean;
   onChange: (limits: SplitLimits) => void;
+  onDisableNotifications: () => void;
+  onEnableNotifications: () => void;
   open: boolean;
   onToggle: () => void;
 }
@@ -89,8 +95,40 @@ function SettingField({
   );
 }
 
-export default function SettingsPanel({ limits, onChange, open, onToggle }: Props) {
+function getNotificationStatusLabel(
+  notificationPermission: BrowserNotificationPermission,
+  notificationsEnabled: boolean,
+): string {
+  if (notificationPermission === "unsupported") {
+    return "Unavailable in this browser";
+  }
+
+  if (notificationsEnabled) {
+    return "Enabled";
+  }
+
+  if (notificationPermission === "denied") {
+    return "Blocked in browser";
+  }
+
+  return "Needs permission";
+}
+
+export default function SettingsPanel({
+  limits,
+  notificationPermission,
+  notificationsEnabled,
+  notificationRequestPending,
+  onChange,
+  onDisableNotifications,
+  onEnableNotifications,
+  open,
+  onToggle,
+}: Props) {
   const resetAll = () => onChange({ ...DEFAULT_LIMITS });
+  const notificationStatusLabel = getNotificationStatusLabel(notificationPermission, notificationsEnabled);
+  const notificationsUnavailable = notificationPermission === "unsupported";
+  const notificationsBlocked = notificationPermission === "denied";
 
   return (
     <div className="overflow-hidden rounded-[2rem] border-4 border-slate-950 bg-[color:var(--color-surface)]">
@@ -159,6 +197,51 @@ export default function SettingsPanel({ limits, onChange, open, onToggle }: Prop
               onChange={(v) => onChange({ ...limits, maxSourcesPerNotebook: v })}
               defaultValue={DEFAULT_LIMITS.maxSourcesPerNotebook}
             />
+            <div className="border-t border-slate-950/10" />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-700">Browser notifications</div>
+                  <div className="text-xs text-slate-400">
+                    Alerts when a split queue finishes, including Chrome, Firefox, and Safari where site notifications are allowed.
+                  </div>
+                </div>
+                <span className="rounded-full border-2 border-slate-950 bg-[#ecfeff] px-2 py-1 text-xs text-slate-700">
+                  {notificationStatusLabel}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {!notificationsEnabled && !notificationsUnavailable && (
+                  <button
+                    type="button"
+                    disabled={notificationRequestPending}
+                    onClick={onEnableNotifications}
+                    className="rounded-full border-2 border-slate-950 bg-[var(--color-brand)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-slate-950 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {notificationRequestPending ? "Requesting access" : "Enable notifications"}
+                  </button>
+                )}
+                {notificationsEnabled && (
+                  <button
+                    type="button"
+                    onClick={onDisableNotifications}
+                    className="rounded-full border-2 border-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 transition-colors hover:bg-slate-100"
+                  >
+                    Disable notifications
+                  </button>
+                )}
+                {notificationsBlocked && (
+                  <p className="text-xs text-amber-700">
+                    Browser permission is blocked. Re-enable site notifications in browser settings, then click enable again.
+                  </p>
+                )}
+                {notificationsUnavailable && (
+                  <p className="text-xs text-slate-500">
+                    This environment does not expose the Notification API.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between pt-1">

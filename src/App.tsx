@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  disableBrowserNotifications,
+  enableBrowserNotifications,
+  getBrowserNotificationPermission,
+  getInitialBrowserNotificationsEnabled,
+  notifySplitCompletion,
+  type BrowserNotificationPermission,
+} from "./app/browserNotifications";
 import { buildArchiveName } from "./app/formatting";
 import { buildNotebookPlan } from "./app/notebookPlan";
 import { fetchProcessingStats, getInitialProcessingStats } from "./app/processingStats";
@@ -35,6 +43,11 @@ export default function App() {
   const [results, setResults] = useState<SplitResult[]>([]);
   const [lastRunSummary, setLastRunSummary] = useState<LastRunSummary | null>(null);
   const [processingStats, setProcessingStats] = useState(getInitialProcessingStats);
+  const [notificationPermission, setNotificationPermission] = useState<BrowserNotificationPermission>(
+    getBrowserNotificationPermission,
+  );
+  const [notificationsEnabled, setNotificationsEnabled] = useState(getInitialBrowserNotificationsEnabled);
+  const [notificationRequestPending, setNotificationRequestPending] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -48,9 +61,36 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const syncNotificationState = (): void => {
+      const permission = getBrowserNotificationPermission();
+      setNotificationPermission(permission);
+      setNotificationsEnabled(getInitialBrowserNotificationsEnabled());
+    };
+
+    syncNotificationState();
+    document.addEventListener("visibilitychange", syncNotificationState);
+    window.addEventListener("focus", syncNotificationState);
+
+    return () => {
+      document.removeEventListener("visibilitychange", syncNotificationState);
+      window.removeEventListener("focus", syncNotificationState);
+    };
+  }, []);
+
   const queue = useImportQueue();
   const processing = useProcessingRunner({
     limits,
+    onProcessingComplete: (batch) => {
+      if (batch.canceled || batch.summary.filesProcessed === 0) {
+        return;
+      }
+
+      notifySplitCompletion({
+        errorCount: batch.errors.length,
+        summary: batch.summary,
+      });
+    },
     pendingImports: queue.pendingImports,
     processingStats,
     removeCompletedImports: queue.removeCompletedImports,
@@ -62,6 +102,23 @@ export default function App() {
     () => buildNotebookPlan(results, limits.maxSourcesPerNotebook),
     [limits.maxSourcesPerNotebook, results],
   );
+
+  const handleEnableNotifications = async (): Promise<void> => {
+    setNotificationRequestPending(true);
+    try {
+      const permission = await enableBrowserNotifications();
+      setNotificationPermission(permission);
+      setNotificationsEnabled(permission === "granted");
+    } finally {
+      setNotificationRequestPending(false);
+    }
+  };
+
+  const handleDisableNotifications = (): void => {
+    const permission = disableBrowserNotifications();
+    setNotificationPermission(permission);
+    setNotificationsEnabled(false);
+  };
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--color-canvas)] text-slate-950">
@@ -78,10 +135,15 @@ export default function App() {
           handleFiles={queue.addFiles}
           lastRunSummary={lastRunSummary}
           limits={limits}
+          notificationPermission={notificationPermission}
+          notificationsEnabled={notificationsEnabled}
+          notificationRequestPending={notificationRequestPending}
           notebookPlan={notebookPlan}
           onClearPendingImports={queue.clearPendingImports}
           onClearAll={() => setResults([])}
+          onDisableNotifications={handleDisableNotifications}
           onDownloadArchive={() => downloadArchiveForResults(notebookPlan, results)}
+          onEnableNotifications={handleEnableNotifications}
           onEditJsonFields={queue.openJsonFieldEditor}
           onRemovePendingImport={queue.removePendingImport}
           onRemoveResult={(index) => setResults((previous) => previous.filter((_, itemIndex) => itemIndex !== index))}
