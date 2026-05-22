@@ -1,4 +1,5 @@
 import type { SplitChunk, SplitResult } from "../types";
+import type { JsonFieldOption } from "../utils/jsonFields";
 
 export interface ChunkPlacement {
   notebookNumber: number;
@@ -50,4 +51,14 @@ export interface ProcessedFileBatch {
   results: SplitResult[];
   errors: string[];
   summary: LastRunSummary;
+  canceled: boolean;
+  completedQueueIds: string[];
+}
+
+export interface QueuedImportItem {
+  queueId: string;
+  file: File;
+  fileName: string;
+  selectedJsonFields: string[];
+  fieldOptions: JsonFieldOption[];
 }

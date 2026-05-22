@@ -8,7 +8,7 @@ export interface JsonFieldConfig {
 }
 
 interface Props {
-  configs: JsonFieldConfig[];
+  config: JsonFieldConfig;
   onCancel: () => void;
   onConfirm: () => void;
   onChangeSelection: (fileKey: string, selectedPaths: string[]) => void;
@@ -19,14 +19,13 @@ function fileSelectionSummary(config: JsonFieldConfig): string {
 }
 
 export default function JsonFieldSelectorModal({
-  configs,
+  config,
   onCancel,
   onConfirm,
   onChangeSelection,
 }: Props) {
-  const hasInvalidSelection = configs.some(
-    (config) => config.fieldOptions.length > 0 && config.selectedPaths.length === 0,
-  );
+  const hasInvalidSelection = config.fieldOptions.length > 0 && config.selectedPaths.length === 0;
+  const selected = new Set(config.selectedPaths);
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-6">
@@ -44,81 +43,72 @@ export default function JsonFieldSelectorModal({
         </div>
 
         <div className="max-h-[55vh] space-y-4 overflow-y-auto px-6 py-5">
-          {configs.map((config) => {
-            const selected = new Set(config.selectedPaths);
+          <section className="rounded-[1.6rem] border-2 border-slate-950 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900">{config.fileName}</h4>
+                <p className="mt-1 text-xs text-slate-500">{fileSelectionSummary(config)}</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChangeSelection(
+                      config.fileKey,
+                      config.fieldOptions.map((field) => field.path),
+                    )
+                  }
+                  className="rounded-full border-2 border-slate-950 px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-[#fff5e6]"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeSelection(config.fileKey, [])}
+                  className="rounded-full border-2 border-slate-950 px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-[#fff1f2]"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
 
-            return (
-              <section
-                key={config.fileKey}
-                className="rounded-[1.6rem] border-2 border-slate-950 bg-white p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">{config.fileName}</h4>
-                    <p className="mt-1 text-xs text-slate-500">{fileSelectionSummary(config)}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onChangeSelection(
-                          config.fileKey,
-                          config.fieldOptions.map((field) => field.path),
-                        )
-                      }
-                      className="rounded-full border-2 border-slate-950 px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-[#fff5e6]"
-                    >
-                      Select all
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onChangeSelection(config.fileKey, [])}
-                      className="rounded-full border-2 border-slate-950 px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-[#fff1f2]"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {config.fieldOptions.map((field) => {
+                const checked = selected.has(field.path);
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {config.fieldOptions.map((field) => {
-                    const checked = selected.has(field.path);
-
-                    return (
-                      <label
-                        key={field.path}
-                        className={`flex cursor-pointer items-start gap-3 rounded-[1.1rem] border-2 px-3 py-3 transition-colors ${
-                          checked
-                            ? "border-slate-950 bg-[#fff8ef]"
-                            : "border-slate-200 bg-slate-50 hover:border-slate-300"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) => {
-                            const nextSelectedPaths = event.target.checked
-                              ? [...config.selectedPaths, field.path]
-                              : config.selectedPaths.filter((path) => path !== field.path);
-                            onChangeSelection(config.fileKey, nextSelectedPaths);
-                          }}
-                          className="mt-0.5 h-4 w-4 rounded border-slate-400 text-[var(--color-brand)] focus:ring-[var(--color-brand)]"
-                        />
-                        <span className="min-w-0">
-                          <span className="block break-all font-mono text-xs font-semibold text-slate-800">
-                            {field.path}
-                          </span>
-                          <span className="mt-1 block break-all text-xs text-slate-500">
-                            {field.sampleValue}
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
+                return (
+                  <label
+                    key={field.path}
+                    className={`flex cursor-pointer items-start gap-3 rounded-[1.1rem] border-2 px-3 py-3 transition-colors ${
+                      checked
+                        ? "border-slate-950 bg-[#fff8ef]"
+                        : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => {
+                        const nextSelectedPaths = event.target.checked
+                          ? [...config.selectedPaths, field.path]
+                          : config.selectedPaths.filter((path) => path !== field.path);
+                        onChangeSelection(config.fileKey, nextSelectedPaths);
+                      }}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-400 text-[var(--color-brand)] focus:ring-[var(--color-brand)]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block break-all font-mono text-xs font-semibold text-slate-800">
+                        {field.path}
+                      </span>
+                      <span className="mt-1 block break-all text-xs text-slate-500">
+                        {field.sampleValue}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-slate-950/10 px-6 py-4">
@@ -139,7 +129,7 @@ export default function JsonFieldSelectorModal({
               onClick={onConfirm}
               className="rounded-full border-2 border-slate-950 bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-950 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              Process files
+              Save fields
             </button>
           </div>
         </div>

@@ -1,21 +1,28 @@
-import type { LastRunSummary, NotebookPlan, ProcessingProgress } from "../app/types";
+import type { LastRunSummary, NotebookPlan, ProcessingProgress, QueuedImportItem } from "../app/types";
 import type { SplitLimits, SplitResult } from "../types";
 import DropZone from "./DropZone";
 import EmptyState from "./EmptyState";
 import LimitStats from "./LimitStats";
 import ProcessingPanel from "./ProcessingPanel";
+import QueuedFilesPanel from "./QueuedFilesPanel";
 import ResultsSection from "./ResultsSection";
 import SettingsPanel from "./SettingsPanel";
 
 interface Props {
   errorMessage: string | null;
-  handleFiles: (files: File[]) => void | Promise<void>;
+  handleFiles: (files: File[]) => Promise<void>;
   lastRunSummary: LastRunSummary | null;
   limits: SplitLimits;
   notebookPlan: NotebookPlan;
+  onClearPendingImports: () => void;
   onClearAll: () => void;
   onDownloadArchive: () => void;
+  onEditJsonFields: (queueId: string) => void;
   onRemoveResult: (index: number) => void;
+  onRemovePendingImport: (queueId: string) => void;
+  onStartProcessing: () => void;
+  onStopProcessing: () => void;
+  pendingImports: QueuedImportItem[];
   onToggleSettings: () => void;
   processing: boolean;
   progress: ProcessingProgress;
@@ -31,9 +38,15 @@ export default function ProcessingWorkspace(props: Props) {
     lastRunSummary,
     limits,
     notebookPlan,
+    onClearPendingImports,
     onClearAll,
     onDownloadArchive,
+    onEditJsonFields,
     onRemoveResult,
+    onRemovePendingImport,
+    onStartProcessing,
+    onStopProcessing,
+    pendingImports,
     onToggleSettings,
     processing,
     progress,
@@ -54,8 +67,17 @@ export default function ProcessingWorkspace(props: Props) {
                 <p className="mt-1 break-words text-xs text-red-600">{errorMessage}</p>
               </div>
             )}
-            {processing && <ProcessingPanel progress={progress} />}
+            {processing && <ProcessingPanel progress={progress} onCancel={onStopProcessing} />}
           </div>
+
+          <QueuedFilesPanel
+            items={pendingImports}
+            onClear={onClearPendingImports}
+            onEditJsonFields={onEditJsonFields}
+            onRemove={onRemovePendingImport}
+            onStart={onStartProcessing}
+            processing={processing}
+          />
 
           {results.length > 0 && (
             <ResultsSection

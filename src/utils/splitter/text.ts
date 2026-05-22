@@ -1,5 +1,12 @@
 import type { SplitChunk } from "../../types";
-import { byteLen, emitProgress, ensureUniqueFileNames, makeChunk, type SplitTextOptions } from "./shared";
+import {
+  byteLen,
+  emitProgress,
+  ensureUniqueFileNames,
+  makeChunk,
+  throwIfAborted,
+  type SplitTextOptions,
+} from "./shared";
 
 function pushChunk(
   chunks: SplitChunk[],
@@ -21,6 +28,7 @@ export async function splitText(text: string, options: SplitTextOptions): Promis
   let chunkBytes = 0;
 
   for (let index = 0; index < tokens.length; index += 1) {
+    throwIfAborted(options.signal);
     const token = tokens[index];
     const isWord = /\S/.test(token);
     const tokenBytes = byteLen(token);
@@ -40,7 +48,12 @@ export async function splitText(text: string, options: SplitTextOptions): Promis
     }
 
     if (index > 0 && index % 5000 === 0) {
-      await emitProgress(options.onProgress, (index / tokens.length) * 100, "Splitting current file");
+      await emitProgress(
+        options.onProgress,
+        (index / tokens.length) * 100,
+        "Splitting current file",
+        options.signal,
+      );
     }
   }
 
@@ -48,6 +61,6 @@ export async function splitText(text: string, options: SplitTextOptions): Promis
     pushChunk(chunks, tokens, { start: chunkStart, end: tokens.length }, options);
   }
 
-  await emitProgress(options.onProgress, 100, "Split complete");
+  await emitProgress(options.onProgress, 100, "Split complete", options.signal);
   return ensureUniqueFileNames(chunks);
 }

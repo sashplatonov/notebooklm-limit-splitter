@@ -17,6 +17,7 @@ interface SplitFileOptions {
   outputFormat?: NotebookTextFormat;
   fileType?: "json" | "text";
   onProgress?: ProgressCallback;
+  signal?: AbortSignal;
 }
 
 function inferOutputFormat(ext: string): NotebookTextFormat {
@@ -53,12 +54,14 @@ export async function splitFile(
         limits,
         creationTimestamp,
         onProgress: options.onProgress,
+        signal: options.signal,
       })
     : await splitText(content, {
         ...buildInfo,
         maxWords,
         maxBytes,
         onProgress: options.onProgress,
+        signal: options.signal,
       });
 
   const normalizedChunks = await verifyChunks({
@@ -68,6 +71,7 @@ export async function splitFile(
     info: buildInfo,
     limits,
     onProgress: options.onProgress,
+    signal: options.signal,
   });
 
   return {

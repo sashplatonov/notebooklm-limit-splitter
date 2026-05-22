@@ -10,6 +10,7 @@ import {
   isTelegramExportJson,
   makeChunk,
   rebuildChunk,
+  throwIfAborted,
   type ChunkBuildInfo,
   type ProgressCallback,
   type SplitTextOptions,
@@ -21,6 +22,7 @@ interface JsonSplitArgs {
   limits: SplitLimits;
   creationTimestamp: string;
   onProgress?: ProgressCallback;
+  signal?: AbortSignal;
 }
 
 function collectLeaves(value: unknown): string[] {
@@ -106,6 +108,7 @@ async function packIntoChunks(entries: string[], options: SplitTextOptions): Pro
   };
 
   for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+    throwIfAborted(options.signal);
     const entry = entries[entryIndex];
     const entryWords = countWords(entry);
     const entryBytes = byteLen(entry);
@@ -133,11 +136,12 @@ async function packIntoChunks(entries: string[], options: SplitTextOptions): Pro
 
     if (entryIndex > 0 && entryIndex % 250 === 0) {
       await emitProgress(options.onProgress, (entryIndex / entries.length) * 100, "Packing JSON entries");
+      throwIfAborted(options.signal);
     }
   }
 
   flush();
-  await emitProgress(options.onProgress, 100, "JSON packing complete");
+  await emitProgress(options.onProgress, 100, "JSON packing complete", options.signal);
   return ensureUniqueFileNames(chunks);
 }
 
@@ -166,6 +170,7 @@ async function splitTelegramJson(
   };
 
   for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+    throwIfAborted(options.signal);
     const message = messages[messageIndex];
     const singleContent = renderChunk([message]);
     const singleWords = countWords(singleContent);
@@ -195,11 +200,12 @@ async function splitTelegramJson(
 
     if (messageIndex > 0 && messageIndex % 100 === 0) {
       await emitProgress(options.onProgress, (messageIndex / messages.length) * 100, "Grouping Telegram messages");
+      throwIfAborted(options.signal);
     }
   }
 
   flush();
-  await emitProgress(options.onProgress, 100, "Telegram export split complete");
+  await emitProgress(options.onProgress, 100, "Telegram export split complete", options.signal);
   return ensureUniqueFileNames(chunks);
 }
 
@@ -209,15 +215,17 @@ export async function splitJson({
   limits,
   creationTimestamp,
   onProgress,
+  signal,
 }: JsonSplitArgs): Promise<SplitChunk[]> {
   const options = {
     ...createSplitOptions(fileName, limits, creationTimestamp),
     onProgress,
+    signal,
   };
 
   let parsed: unknown;
   try {
-    await emitProgress(onProgress, 5, "Parsing JSON");
+    await emitProgress(onProgress, 5, "Parsing JSON", signal);
     parsed = JSON.parse(raw);
   } catch {
     return splitText(raw, options);
@@ -226,22 +234,22 @@ export async function splitJson({
   const totalBytes = byteLen(raw);
   const totalWords = countWords(raw);
   if (totalWords <= options.maxWords && totalBytes <= options.maxBytes) {
-    await emitProgress(onProgress, 100, "No split needed");
+    await emitProgress(onProgress, 100, "No split needed", signal);
     return [makeChunk(raw, 0, options)];
   }
 
   if (isTelegramExportJson(parsed)) {
-    await emitProgress(onProgress, 10, "Detected Telegram export");
+    await emitProgress(onProgress, 10, "Detected Telegram export", signal);
     return splitTelegramJson(parsed, options);
   }
 
-  await emitProgress(onProgress, 20, "Analyzing JSON structure");
+  await emitProgress(onProgress, 20, "Analyzing JSON structure", signal);
   const leaves = collectLeaves(parsed);
   if (leaves.length === 1) {
     return splitText(leaves[0], options);
   }
 
-  await emitProgress(onProgress, 35, "Packing JSON content");
+  await emitProgress(onProgress, 35, "Packing JSON content", signal);
   return packIntoChunks(leaves, options);
 }
 
@@ -252,6 +260,7 @@ export function verifyChunks({
   info,
   limits,
   onProgress,
+  signal,
 }: {
   chunks: SplitChunk[];
   content: string;
@@ -259,6 +268,7 @@ export function verifyChunks({
   info: ChunkBuildInfo;
   limits: SplitLimits;
   onProgress?: ProgressCallback;
+  signal?: AbortSignal;
 }): Promise<SplitChunk[]> {
   const verified: SplitChunk[] = [];
   const maxWords = limits.maxWordsPerSource;
@@ -267,6 +277,7 @@ export function verifyChunks({
 
   return chunks.reduce<Promise<SplitChunk[]>>(async (previousPromise, chunk) => {
     await previousPromise;
+    throwIfAborted(signal);
 
     if (chunk.wordCount > maxWords || chunk.sizeBytes > maxBytes) {
       const splitChunks = await splitText(chunk.content, {
@@ -275,6 +286,7 @@ export function verifyChunks({
         maxWords,
         maxBytes,
         onProgress,
+        signal,
       });
       splitChunks.forEach((splitChunk) => {
         verified.push(rebuildChunk(splitChunk, verified.length, info));

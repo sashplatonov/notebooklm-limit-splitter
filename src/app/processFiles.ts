@@ -1,23 +1,53 @@
 import type { SplitLimits } from "../types";
 import { prepareFileForNotebookLm } from "../utils/filePipeline";
 import { splitFile } from "../utils/splitter";
+import { ProcessingAbortedError, throwIfAborted } from "../utils/splitter/shared";
 import { createSummary } from "./formatting";
-import type { ProcessedFileBatch, ProcessingProgress } from "./types";
+import type { ProcessedFileBatch, ProcessingProgress, QueuedImportItem } from "./types";
 
 interface ProcessFilesArgs {
-  files: File[];
+  items: QueuedImportItem[];
   limits: SplitLimits;
   onProgress: (progress: ProcessingProgress) => void;
-  jsonFieldSelections?: Record<string, string[]>;
+  signal?: AbortSignal;
 }
 
-function createFileKey(file: File): string {
-  return `${file.name}::${file.size}::${file.lastModified}`;
+interface ProgressSnapshot {
+  itemCount: number;
+  completedFiles: number;
+  currentFileName: string | null;
+  currentFilePercent: number;
+  currentStage: string;
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+interface ProcessSingleItemArgs {
+  index: number;
+  item: QueuedImportItem;
+  itemCount: number;
+  limits: SplitLimits;
+  onProgress: (progress: ProcessingProgress) => void;
+  signal?: AbortSignal;
+}
+
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new ProcessingAbortedError());
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new ProcessingAbortedError());
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -31,84 +61,132 @@ function buildProgress(progress: ProcessingProgress): ProcessingProgress {
   };
 }
 
-export async function processFilesForNotebookLm({
-  files,
+function emitQueueProgress(
+  onProgress: (progress: ProcessingProgress) => void,
+  snapshot: ProgressSnapshot,
+): void {
+  const {
+    itemCount,
+    completedFiles,
+    currentFileName,
+    currentFilePercent,
+    currentStage,
+  } = snapshot;
+  onProgress(buildProgress({
+    totalFiles: itemCount,
+    completedFiles,
+    currentFileName,
+    currentFilePercent,
+    currentStage,
+  }));
+}
+
+async function processSingleItem({
+  index,
+  item,
+  itemCount,
   limits,
   onProgress,
-  jsonFieldSelections = {},
+  signal,
+}: ProcessSingleItemArgs) {
+  const { file, fileName, selectedJsonFields } = item;
+  const prepared = await prepareFileForNotebookLm(file, { selectedJsonFields });
+  emitQueueProgress(onProgress, {
+    itemCount,
+    completedFiles: index,
+    currentFileName: fileName,
+    currentFilePercent: 5,
+    currentStage: "File loaded",
+  });
+  await wait(10, signal);
+
+  return splitFile(prepared.content, prepared.normalizedName, limits, {
+    originalName: prepared.originalName,
+    outputFormat: prepared.outputFormat,
+    fileType: prepared.sourceKind,
+    signal,
+    onProgress: (info) => {
+      emitQueueProgress(onProgress, {
+        itemCount,
+        completedFiles: index,
+        currentFileName: fileName,
+        currentFilePercent: info.percent,
+        currentStage: info.stage,
+      });
+    },
+  });
+}
+
+export async function processFilesForNotebookLm({
+  items,
+  limits,
+  onProgress,
+  signal,
 }: ProcessFilesArgs): Promise<ProcessedFileBatch> {
   const startedAt = new Date().toISOString();
   const results: ProcessedFileBatch["results"] = [];
   const errors: string[] = [];
+  const completedQueueIds: string[] = [];
+  let canceled = false;
 
-  onProgress(buildProgress({
-    totalFiles: files.length,
+  emitQueueProgress(onProgress, {
+    itemCount: items.length,
     completedFiles: 0,
-    currentFileName: files[0]?.name ?? null,
+    currentFileName: items[0]?.fileName ?? null,
     currentFilePercent: 0,
     currentStage: "Waiting to start",
-  }));
-  await wait(30);
+  });
+  await wait(30, signal);
 
-  for (const [index, file] of files.entries()) {
-    onProgress(buildProgress({
-      totalFiles: files.length,
+  for (const [index, item] of items.entries()) {
+    const { fileName, queueId } = item;
+    emitQueueProgress(onProgress, {
+      itemCount: items.length,
       completedFiles: index,
-      currentFileName: file.name,
+      currentFileName: fileName,
       currentFilePercent: 0,
       currentStage: "Preparing file",
-    }));
-    await wait(0);
-
+    });
     try {
-      const prepared = await prepareFileForNotebookLm(file, {
-        selectedJsonFields: jsonFieldSelections[createFileKey(file)],
+      await wait(0, signal);
+      throwIfAborted(signal);
+      const result = await processSingleItem({
+        index,
+        item,
+        itemCount: items.length,
+        limits,
+        onProgress,
+        signal,
       });
-      onProgress(buildProgress({
-        totalFiles: files.length,
-        completedFiles: index,
-        currentFileName: file.name,
-        currentFilePercent: 5,
-        currentStage: "File loaded",
-      }));
-      await wait(10);
-
-      const result = await splitFile(prepared.content, prepared.normalizedName, limits, {
-        originalName: prepared.originalName,
-        outputFormat: prepared.outputFormat,
-        fileType: prepared.sourceKind,
-        onProgress: (info) => {
-          onProgress(buildProgress({
-            totalFiles: files.length,
-            completedFiles: index,
-            currentFileName: file.name,
-            currentFilePercent: info.percent,
-            currentStage: info.stage,
-          }));
-        },
-      });
-
       results.push(result);
+      completedQueueIds.push(queueId);
     } catch (error) {
+      if (error instanceof ProcessingAbortedError) {
+        canceled = true;
+        break;
+      }
       const message = error instanceof Error ? error.message : "Unknown error";
-      errors.push(`${file.name}: ${message}`);
+      errors.push(`${fileName}: ${message}`);
+      completedQueueIds.push(queueId);
     }
 
-    const nextFileName = index + 1 < files.length ? files[index + 1].name : null;
-    const nextPercent = index + 1 < files.length ? 0 : 100;
-    const nextStage = index + 1 < files.length ? "Queued" : "Done";
-    onProgress(buildProgress({
-      totalFiles: files.length,
+    const nextFileName = index + 1 < items.length ? items[index + 1].fileName : null;
+    const nextPercent = index + 1 < items.length ? 0 : 100;
+    const nextStage = index + 1 < items.length ? "Queued" : "Done";
+    emitQueueProgress(onProgress, {
+      itemCount: items.length,
       completedFiles: index + 1,
       currentFileName: nextFileName,
       currentFilePercent: nextPercent,
       currentStage: nextStage,
-    }));
+    });
   }
 
   return {
     results,
     errors,
-    summary: createSummary(startedAt, files.length),
+    summary: createSummary(startedAt, completedQueueIds.length),
+    canceled,
+    completedQueueIds,
   };
 }

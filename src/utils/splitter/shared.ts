@@ -7,6 +7,13 @@ export interface SplitProgressInfo {
 
 export type ProgressCallback = (info: SplitProgressInfo) => void;
 
+export class ProcessingAbortedError extends Error {
+  constructor() {
+    super("Processing was canceled");
+    this.name = "AbortError";
+  }
+}
+
 export interface ChunkBuildInfo {
   baseName: string;
   ext: string;
@@ -17,6 +24,13 @@ export interface SplitTextOptions extends ChunkBuildInfo {
   maxWords: number;
   maxBytes: number;
   onProgress?: ProgressCallback;
+  signal?: AbortSignal;
+}
+
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new ProcessingAbortedError();
+  }
 }
 
 export function countWords(text: string): number {
@@ -213,8 +227,10 @@ export function ensureUniqueFileNames(chunks: SplitChunk[]): SplitChunk[] {
 export async function emitProgress(
   onProgress: ProgressCallback | undefined,
   percent: number,
-  stage: string
+  stage: string,
+  signal?: AbortSignal,
 ): Promise<void> {
+  throwIfAborted(signal);
   if (!onProgress) {
     return;
   }
@@ -223,6 +239,7 @@ export async function emitProgress(
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
   });
+  throwIfAborted(signal);
 }
 
 export function formatBytes(bytes: number): string {

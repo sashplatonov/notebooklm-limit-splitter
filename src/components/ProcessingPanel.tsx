@@ -2,6 +2,7 @@ import type { ProcessingProgress } from "../app/types";
 
 interface ProcessingPanelProps {
   progress: ProcessingProgress;
+  onCancel: () => void;
 }
 
 function ProgressBar({
@@ -29,7 +30,7 @@ function ProgressBar({
   );
 }
 
-export default function ProcessingPanel({ progress }: ProcessingPanelProps): JSX.Element {
+export default function ProcessingPanel({ progress, onCancel }: ProcessingPanelProps): JSX.Element {
   const overallProgressPercent =
     progress.totalFiles > 0 ? Math.round((progress.completedFiles / progress.totalFiles) * 100) : 0;
   const remainingFiles = Math.max(progress.totalFiles - progress.completedFiles, 0);
@@ -57,6 +58,15 @@ export default function ProcessingPanel({ progress }: ProcessingPanelProps): JSX
       </div>
 
       <div className="space-y-4 px-5 py-4">
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-full border-2 border-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-red-600 transition-colors hover:bg-[#fff1f2]"
+          >
+            Stop process
+          </button>
+        </div>
         <ProgressBar
           label="Queue progress"
           value={overallProgressPercent}
