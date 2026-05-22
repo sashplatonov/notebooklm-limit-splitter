@@ -13,12 +13,16 @@ export default function DropZone({ onFiles }: Props) {
 
   const handleFiles = useCallback(
     (fileList: FileList | null) => {
-      if (!fileList) return;
+      if (!fileList) {
+        return;
+      }
       const arr = Array.from(fileList).filter((f) => {
         const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
         return ACCEPTED.includes(ext);
       });
-      if (arr.length > 0) onFiles(arr);
+      if (arr.length > 0) {
+        onFiles(arr);
+      }
     },
     [onFiles]
   );

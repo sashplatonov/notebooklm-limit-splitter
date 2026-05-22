@@ -49,7 +49,9 @@ function SettingField({
             value={value}
             onChange={(e) => {
               const v = Number(e.target.value);
-              if (!isNaN(v) && v >= min && v <= max) onChange(v);
+              if (!isNaN(v) && v >= min && v <= max) {
+                onChange(v);
+              }
             }}
             className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-right text-sm font-mono font-semibold text-slate-700 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
           />
