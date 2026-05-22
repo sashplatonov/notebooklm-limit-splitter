@@ -1,5 +1,5 @@
 import type { SplitLimits } from "../types";
-import { prepareFileForNotebookLm } from "../utils/filePipeline";
+import { prepareFileForNotebookLm, type PreparedFile } from "../utils/filePipeline";
 import { splitFile } from "../utils/splitter";
 import { ProcessingAbortedError, throwIfAborted } from "../utils/splitter/shared";
 import { createSummary } from "./formatting";
@@ -24,9 +24,13 @@ interface ProcessSingleItemArgs {
   index: number;
   item: QueuedImportItem;
   itemCount: number;
-  limits: SplitLimits;
   onProgress: (progress: ProcessingProgress) => void;
   signal?: AbortSignal;
+}
+
+interface PreparedBatchItem {
+  item: QueuedImportItem;
+  prepared: PreparedFile;
 }
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
@@ -85,10 +89,9 @@ async function processSingleItem({
   index,
   item,
   itemCount,
-  limits,
   onProgress,
   signal,
-}: ProcessSingleItemArgs) {
+}: ProcessSingleItemArgs): Promise<PreparedFile> {
   const { file, fileName, selectedJsonFields } = item;
   const prepared = await prepareFileForNotebookLm(file, { selectedJsonFields });
   emitQueueProgress(onProgress, {
@@ -100,16 +103,64 @@ async function processSingleItem({
   });
   await wait(10, signal);
 
-  return splitFile(prepared.content, prepared.normalizedName, limits, {
-    originalName: prepared.originalName,
-    outputFormat: prepared.outputFormat,
-    fileType: prepared.sourceKind,
+  return prepared;
+}
+
+function buildCombinedBaseName(items: QueuedImportItem[]): string {
+  if (items.length === 1) {
+    return items[0].fileName.replace(/\.[^/.]+$/, "") || "import";
+  }
+
+  const firstBaseName = items[0].fileName.replace(/\.[^/.]+$/, "") || "import";
+  return `${firstBaseName}_combined_${items.length}_files`;
+}
+
+function joinPreparedContents(preparedItems: PreparedBatchItem[]): string {
+  return preparedItems
+    .map(({ item, prepared }) => `=== FILE: ${item.fileName} ===\n${prepared.content.trim()}`)
+    .join("\n\n");
+}
+
+async function processCombinedItems({
+  preparedItems,
+  itemCount,
+  limits,
+  onProgress,
+  signal,
+}: {
+  preparedItems: PreparedBatchItem[];
+  itemCount: number;
+  limits: SplitLimits;
+  onProgress: (progress: ProcessingProgress) => void;
+  signal?: AbortSignal;
+}) {
+  const isSingleFile = preparedItems.length === 1;
+  const combinedBaseName = buildCombinedBaseName(preparedItems.map(({ item }) => item));
+  const combinedContent = isSingleFile ? preparedItems[0].prepared.content : joinPreparedContents(preparedItems);
+  const combinedFileName = isSingleFile ? preparedItems[0].prepared.normalizedName : `${combinedBaseName}.txt`;
+  const originalName = isSingleFile ? preparedItems[0].prepared.originalName : `${preparedItems.length} files combined`;
+  const outputFormat = isSingleFile ? preparedItems[0].prepared.outputFormat : "txt";
+  const fileType = isSingleFile ? preparedItems[0].prepared.sourceKind : "text";
+
+  emitQueueProgress(onProgress, {
+    itemCount,
+    completedFiles: preparedItems.length,
+    currentFileName: combinedFileName,
+    currentFilePercent: 5,
+    currentStage: "Combining files",
+  });
+  await wait(10, signal);
+
+  return splitFile(combinedContent, combinedFileName, limits, {
+    originalName,
+    outputFormat,
+    fileType,
     signal,
     onProgress: (info) => {
       emitQueueProgress(onProgress, {
         itemCount,
-        completedFiles: index,
-        currentFileName: fileName,
+        completedFiles: preparedItems.length,
+        currentFileName: combinedFileName,
         currentFilePercent: info.percent,
         currentStage: info.stage,
       });
@@ -127,6 +178,7 @@ export async function processFilesForNotebookLm({
   const results: ProcessedFileBatch["results"] = [];
   const errors: string[] = [];
   const completedQueueIds: string[] = [];
+  const preparedItems: PreparedBatchItem[] = [];
   let canceled = false;
 
   emitQueueProgress(onProgress, {
@@ -140,7 +192,6 @@ export async function processFilesForNotebookLm({
 
   for (const [index, item] of items.entries()) {
     const { fileName, queueId } = item;
-    const fileStartedAt = new Date().toISOString();
     emitQueueProgress(onProgress, {
       itemCount: items.length,
       completedFiles: index,
@@ -155,13 +206,12 @@ export async function processFilesForNotebookLm({
         index,
         item,
         itemCount: items.length,
-        limits,
         onProgress,
         signal,
       });
-      results.push({
-        ...result,
-        importSummary: createSummary(fileStartedAt, 1),
+      preparedItems.push({
+        item,
+        prepared: result,
       });
       completedQueueIds.push(queueId);
     } catch (error) {
@@ -176,7 +226,7 @@ export async function processFilesForNotebookLm({
 
     const nextFileName = index + 1 < items.length ? items[index + 1].fileName : null;
     const nextPercent = index + 1 < items.length ? 0 : 100;
-    const nextStage = index + 1 < items.length ? "Queued" : "Done";
+    const nextStage = index + 1 < items.length ? "Queued" : "Prepared";
     emitQueueProgress(onProgress, {
       itemCount: items.length,
       completedFiles: index + 1,
@@ -184,6 +234,39 @@ export async function processFilesForNotebookLm({
       currentFilePercent: nextPercent,
       currentStage: nextStage,
     });
+  }
+
+  if (!canceled && preparedItems.length > 0) {
+    const combinedStartedAt = new Date().toISOString();
+    try {
+      await wait(0, signal);
+      throwIfAborted(signal);
+      const combinedResult = await processCombinedItems({
+        preparedItems,
+        itemCount: items.length,
+        limits,
+        onProgress,
+        signal,
+      });
+      results.push({
+        ...combinedResult,
+        importSummary: createSummary(combinedStartedAt, preparedItems.length),
+      });
+      emitQueueProgress(onProgress, {
+        itemCount: items.length,
+        completedFiles: items.length,
+        currentFileName: null,
+        currentFilePercent: 100,
+        currentStage: "Done",
+      });
+    } catch (error) {
+      if (error instanceof ProcessingAbortedError) {
+        canceled = true;
+      } else {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        errors.push(`Combined import: ${message}`);
+      }
+    }
   }
 
   return {

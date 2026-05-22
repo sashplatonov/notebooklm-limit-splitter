@@ -31,7 +31,7 @@ This repository ships a single-page workflow that runs file preparation in the b
 
 - Accepts `.json`, `.txt`, `.md`, `.markdown`, `.csv`, `.log`, `.xml`, `.yaml`, `.yml`, `.ini`, and `.cfg` inputs.
 - Lets the user inspect JSON field paths and keep only selected fields before splitting.
-- Splits content by configurable word-count and file-size thresholds.
+- When multiple files are processed in one run, the app first combines them into one source stream and then splits that combined payload by the configured word-count and file-size thresholds.
 - Preserves text-oriented output formats: JSON becomes `.txt`, Markdown stays `.md`, CSV stays `.csv`, and other text-like files become `.txt`.
 - Builds a notebook distribution plan so the final ZIP is arranged into `notebook-<n>/` folders with at most the configured number of sources per notebook.
 - Stores split limits and browser notification preferences in `localStorage`.
@@ -156,7 +156,7 @@ The `curl` check applies only when the runtime is actually published to the host
 1. The drop zone and queue collect candidate files.
 2. JSON files can open a field-selection modal before processing.
 3. `prepareFileForNotebookLm()` normalizes each accepted file into a text payload.
-4. `processFilesForNotebookLm()` reports progress, handles cancellation, and accumulates per-file errors.
+4. `processFilesForNotebookLm()` reports progress, handles cancellation, normalizes each queued file, and combines successful inputs into one split source per run.
 5. `splitFile()` delegates to the JSON or text splitter and verifies the chunk output.
 6. `buildNotebookPlan()` groups sorted chunks into notebook folders.
 7. `createZipBlob()` assembles the final archive client-side and triggers download.

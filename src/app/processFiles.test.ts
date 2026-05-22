@@ -81,28 +81,47 @@ describe("processFiles", () => {
       expect(result.errors).toHaveLength(0);
       expect(result.canceled).toBe(false);
       expect(result.completedQueueIds).toEqual(["queue-1"]);
+      expect(mockSplitFile).toHaveBeenCalledTimes(1);
+      expect(mockSplitFile).toHaveBeenCalledWith(
+        "test content",
+        "test.txt",
+        defaultLimits,
+        expect.objectContaining({
+          originalName: "test.txt",
+          outputFormat: "txt",
+          fileType: "text",
+        }),
+      );
       expect(onProgress).toHaveBeenCalled();
     });
 
-    it("processes multiple files in sequence", async () => {
+    it("combines multiple files into a single split source", async () => {
       const file1 = createMockFile("content 1", "file1.txt");
       const file2 = createMockFile("content 2", "file2.txt");
 
-      mockPrepareFile.mockResolvedValue({
-        originalName: "test.txt",
-        normalizedName: "test.txt",
+      mockPrepareFile
+      .mockResolvedValueOnce({
+        originalName: "file1.txt",
+        normalizedName: "file1.txt",
         outputFormat: "txt",
-        content: "test",
+        content: "content 1",
+        sourceKind: "text",
+      })
+      .mockResolvedValueOnce({
+        originalName: "file2.txt",
+        normalizedName: "file2.txt",
+        outputFormat: "txt",
+        content: "content 2",
         sourceKind: "text",
       });
 
       mockSplitFile.mockResolvedValue({
-        originalName: "test.txt",
-        normalizedName: "test.txt",
+        originalName: "2 files combined",
+        normalizedName: "file1_combined_2_files.txt",
         outputFormat: "txt",
         fileType: "text",
-        originalWordCount: 1,
-        originalSizeBytes: 4,
+        originalWordCount: 8,
+        originalSizeBytes: 64,
         chunks: [],
       });
 
@@ -118,8 +137,19 @@ describe("processFiles", () => {
         onProgress,
       });
 
-      expect(result.results).toHaveLength(2);
+      expect(result.results).toHaveLength(1);
       expect(result.completedQueueIds).toEqual(["q1", "q2"]);
+      expect(mockSplitFile).toHaveBeenCalledTimes(1);
+      expect(mockSplitFile).toHaveBeenCalledWith(
+        "=== FILE: file1.txt ===\ncontent 1\n\n=== FILE: file2.txt ===\ncontent 2",
+        "file1_combined_2_files.txt",
+        defaultLimits,
+        expect.objectContaining({
+          originalName: "2 files combined",
+          outputFormat: "txt",
+          fileType: "text",
+        }),
+      );
     });
 
     it("aggregates errors from failed files", async () => {
@@ -146,6 +176,7 @@ describe("processFiles", () => {
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toContain("test.txt");
       expect(result.errors[0]).toContain("Processing failed");
+      expect(mockSplitFile).not.toHaveBeenCalled();
     });
 
     it("handles abort signal during processing", async () => {
@@ -177,6 +208,7 @@ describe("processFiles", () => {
       });
 
       expect(result.canceled).toBe(true);
+      expect(mockSplitFile).not.toHaveBeenCalled();
     });
 
     it("handles empty items array", async () => {
@@ -191,6 +223,7 @@ describe("processFiles", () => {
       expect(result.errors).toHaveLength(0);
       expect(result.canceled).toBe(false);
       expect(result.completedQueueIds).toHaveLength(0);
+      expect(mockSplitFile).not.toHaveBeenCalled();
     });
 
     it("emits progress updates during processing", async () => {
